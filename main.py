@@ -4,7 +4,7 @@
 
 import tensorflow as tf  # Tensorflow including the Keras package within
 import os  # os to access and use directories
-import numpy as np # numpy for array operations
+import numpy as np  # numpy for array operations
 
 from tensorflow.keras.models import load_model  # Load saved model
 
@@ -37,7 +37,7 @@ callbacks = [
 ]
 
 # Initialize dataset variables
-x_test = x_train = y_train = None
+x_test = x_train = y_train = model = None
 
 # Set GPU memory growth
 physical_devices = tf.config.experimental.list_physical_devices('GPU')
@@ -80,11 +80,11 @@ if __name__ == '__main__':
                                 steps_per_epoch=250, epochs=EPOCHS, callbacks=callbacks, verbose=1)
 
             # Save model
-            model.save("frozen_models/model.h5")
+            model.save("saved_models/model.h5")
 
         elif state == 'load_model':
             # Load model
-            model = load_model('frozen_models/model.h5')
+            model = load_model('saved_models/model.h5')
 
         elif state == 'test':
             # Select test type
