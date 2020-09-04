@@ -1,5 +1,7 @@
 import tensorflow as tf
+
 from tensorflow.keras.layers import Input, Lambda, Conv2D, Dropout, MaxPooling2D, Conv2DTranspose, concatenate
+from tensorflow.keras.metrics import MeanIoU
 from tensorflow.keras import Model
 
 
@@ -7,10 +9,10 @@ from tensorflow.keras import Model
 # Parameters:
 #   height: image height (int)
 #   width: image width (int)
-def create_unet(height, width, channels):
+def create_unet(width, height, channels):
     # Encoder: Input with normalization into [0,1] for a color (3-channel) image with specified width and height
-    inputs = Input((height, width, channels))
-    norm = Lambda(lambda x: x / 255)(inputs)
+    inputs = Input((width, height, channels))
+    norm = Lambda(lambda x: x / 127.5 - 1)(inputs)  # Change to [-1, 1]
 
     # Five cycles of Convolution -> Dropout -> Convolution -> Max Pooling with ELU activations
     c1 = Conv2D(16, (3, 3), activation=tf.keras.activations.elu, kernel_initializer='he_normal', padding='same')(norm)
@@ -67,7 +69,8 @@ def create_unet(height, width, channels):
 
     # Set model with Adam Optimizer
     model = Model(inputs=[inputs], outputs=[outputs])
-    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy', MeanIoU(num_classes=2)])
     model.summary()
+    # Can adjust additional parameters on the adam
 
     return model

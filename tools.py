@@ -3,8 +3,12 @@ import imutils
 import matplotlib.pyplot as plt  # output test plot
 import numpy as np
 import random
+import os
 
-from skimage.io import imshow  # show images as windows
+from tqdm import tqdm  # progress bars on database extraction
+from skimage import img_as_ubyte
+from skimage.io import imshow, imread, imsave  # show images as windows
+from skimage.transform import resize  # resize images
 from skimage.feature import peak_local_max
 from skimage.segmentation import watershed
 from scipy import ndimage
@@ -16,18 +20,28 @@ from scipy import ndimage
 #   model: CNN model used
 def pred_show(x_test, model):
     # Predict random example microscopy image from test set
-    idx = random.randint(0, len(x_test))
+    index_type = input('Choose index type (random, chosen)')
+    if index_type == 'random':
+        idx = random.randint(0, len(x_test))
+    elif index_type == 'chosen':
+        idx = int(input('Select index:'))
     x = np.array(x_test[idx])
     x = np.expand_dims(x, axis=0)
     predict = model.predict(x, verbose=1)
+    print('Pre-conversion')
+    print(np.shape(predict))
+    print(predict[0, :, :, 0])
 
     # Current prediction set to be above 50% confidence
-    predict = (predict > 0.5).astype(np.uint8)
+    print('Post-conversion')
+    predict = (predict > 0.1).astype(np.uint8)
+    print(np.shape(predict))
+    print(predict[0, :, :, 0])
 
     # Show windows of predicted mask and image
+    plt.figure(1)
     imshow(np.squeeze(predict[0]))
-    plt.show()
-    print(np.squeeze(predict[0]).shape)
+    plt.figure(2)
     imshow(x_test[idx])
     plt.show()
 
@@ -44,7 +58,7 @@ def watershed_pred(x_test, model, idx):
     predict = model.predict(x_img_exp, verbose=1)
 
     # Current prediction set to be above 50% confidence
-    predict = (predict > 0.5).astype(np.uint8)
+    predict = (predict > 0.1).astype(np.uint8)
 
     # Create numpy image to be used in watershed
     image = np.squeeze(predict[0])
@@ -89,3 +103,93 @@ def watershed_pred(x_test, model, idx):
     plt.figure(4)
     imshow(x_img_cpy)
     plt.show()
+
+
+# Purpose: Slice up a directory of larger images and masks into a desired size, currently ignores the bottom and right
+# edges if there is a remainder
+# Parameters:
+#   tiff_path: original image path
+#   label_path: original mask path
+#   data_path: cut-up image path
+#   mask_path: cut-up mask path
+#   height: original height
+#   width: original width
+#   height_final: desired image height
+#   width_final: desired image width
+def slice_data(tiff_path, label_path, data_path, mask_path, height, width, height_final, width_final):
+    # Assign image ids through the directory
+    imagelist = os.listdir(tiff_path)
+
+    # Calculate # of cut-outs from the original image
+    height_ratio = height // height_final
+    width_ratio = width // width_final
+
+    # Loop through every image using given path and unique folder identifier
+    for image in tqdm(imagelist):
+        path = tiff_path + image
+        img = imread(path)
+        img = np.expand_dims(resize(img, (height, width), mode='constant', preserve_range=True), axis=-1)
+
+        for i in range(height_ratio):
+            for j in range(width_ratio):
+                sliced_img = img[i * height_final:(i + 1) * height_final, j * width_final:(j + 1) * width_final]
+                sliced_img = sliced_img.astype(np.uint8)
+                imsave(data_path + image[:-6] + '_' + str(i * 4 + j) + image[-6:], sliced_img, check_contrast=False)
+
+    # Assign image ids through the directory
+    masklist = os.listdir(label_path)
+
+    # Loop through every image using given path and unique folder identifier
+    for mask in tqdm(masklist):
+        path = label_path + mask
+        img = imread(path)
+        # img = np.expand_dims(resize(img, (width, height), mode='constant', preserve_range=True), axis=-1)
+
+        for i in range(height_ratio):
+            for j in range(width_ratio):
+                sliced_img = img[i * height_final:(i + 1) * height_final, j * width_final:(j + 1) * width_final]
+                sliced_img = (sliced_img.astype(bool) * 255).astype(np.uint8)
+                imsave(mask_path + mask[:-8] + '_' + str(i * 4 + j) + mask[-8:], sliced_img, check_contrast=False)
+
+
+# Purpose: Displays the input data as images and values
+# Parameters:
+#   x_train: numpy array of input data
+#   y_train: numpy array of input masks
+def check_data(x_train, y_train):
+    idx = random.randint(0, 100)
+    plt.figure(1)
+    imshow(x_train[idx])
+    plt.figure(2)
+    imshow(y_train[idx])
+    plt.show()
+    print(x_train[idx, :, :, 0])
+    print(y_train[idx, :, :, 0])
+
+
+def blank_filter(image_from, mask_from, image_to, mask_to):
+    # Assign image ids through the directory
+    masklist = os.listdir(mask_from)
+
+    # Loop through every image using given path and unique folder identifier
+    for mask in tqdm(masklist):
+        mask_path = mask_from + mask
+        mask_img = imread(mask_path)
+
+        if np.count_nonzero(mask_img) > 30:
+            imsave(mask_to + mask, mask_img, check_contrast=False)
+
+            image = mask[:-8] + 'BF.png'
+            image_path = image_from + image
+            raw_image = imread(image_path)
+            imsave(image_to + image, raw_image, check_contrast=False)
+
+
+# def filter
+#  Change data generator to find its file names based on the label
+#  Some instances of class 1, overwhelming number of class 0's --> unbalanced datasets
+#  Can easily run into problems doing it automatically
+#  Staining might not be full-size sometimes
+#  Try removing pure background labels - can do automatically <--
+#  Hopefully
+#  https://www.youtube.com/c/sentdex/playlists

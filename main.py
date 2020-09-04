@@ -7,23 +7,34 @@ import os  # os to access and use directories
 import numpy as np  # numpy for array operations
 
 from tensorflow.keras.models import load_model  # Load saved model
+from tensorflow.keras.callbacks import EarlyStopping, TensorBoard, ModelCheckpoint  # Callbacks to save/evaluate
 
 # User-defined functions
-from datagen import create_test_arrays, create_train_arrays, create_generators  # data importer functions
+from datagen import create_test_arrays, create_train_arrays, create_generators, create_ids  # data importer functions
 from model import create_unet  # U-Net CNN model
-from tools import pred_show, watershed_pred  # Test model prediction
+from tools import pred_show, watershed_pred, slice_data, check_data, blank_filter  # Test model prediction
+from generator import DataGenerator  # Sequence data generator class
 
 # Image dimensions (modify to fit microscopy)
-IMG_WIDTH = 128
-IMG_HEIGHT = 128
+PRE_IMG_HEIGHT = 1040
+PRE_IMG_WIDTH = 1392
+IMG_HEIGHT = 256
+IMG_WIDTH = 256
 IMG_CHANNELS = 3
-BATCH_SIZE = 16
-EPOCHS = 20
+BATCH_SIZE = 4
+EPOCHS = 10
 VALID_SPLIT = 0.1
 
 # Dataset paths
-TRAIN_DATA_PATH = 'train/'
-TEST_DATA_PATH = 'test/'
+DATA_RAW_PATH = 'Data/'
+LABEL_RAW_PATH = 'Label/'
+DATA_PATH = 'Data_Filtered/'
+LABEL_PATH = 'Label_Filtered/'
+DATA_SAVE = 'numpy_data/'
+MODEL_SAVE = 'saved_models/model'
+SAVE_POSTFIX = '_filtered'
+
+TEST_DATA_PATH = 'Data/'
 
 # Checkpoints to keep the best weights
 checkpoint_path = "checkpoints/test.ckpt"
@@ -31,9 +42,9 @@ checkpoint_dir = os.path.dirname(checkpoint_path)
 
 # Create checkpoints/callbacks to stop and save before overfitting
 callbacks = [
-    tf.keras.callbacks.EarlyStopping(patience=2, monitor='val_loss'),
-    tf.keras.callbacks.TensorBoard(log_dir='./logs'),
-    tf.keras.callbacks.ModelCheckpoint(checkpoint_path, save_weights_only=True, verbose=1)
+    EarlyStopping(patience=2, monitor='val_loss'),
+    TensorBoard(log_dir='./logs'),
+    ModelCheckpoint(checkpoint_path, save_weights_only=True, verbose=1)
 ]
 
 # Initialize dataset variables
@@ -52,48 +63,87 @@ if __name__ == '__main__':
     # Prompt until program is terminated
     while state != 'exit':
         # Select starting state
-        state = input('Select mode: (data, load_data, train, load_model, test, exit)')
+        state = input('Select mode: (filter, slice, data, load_data, train, load_model, test, check, exit)')
 
-        if state == 'data':
+        if state == 'filter':
+            blank_filter(DATA_RAW_PATH, LABEL_RAW_PATH, DATA_PATH, LABEL_PATH)
+            print('Filtered blank images')
+
+        elif state == 'slice':
+            # Cuts up image into desired final dimensions
+            slice_data(DATA_RAW_PATH, LABEL_RAW_PATH, DATA_PATH, LABEL_PATH, PRE_IMG_HEIGHT, PRE_IMG_WIDTH,
+                       IMG_HEIGHT, IMG_WIDTH)
+            print('Sliced images')
+
+        elif state == 'data':
             # Use create_image_arrays() to turn the dataset into arrays
-            x_train, y_train = create_train_arrays(TRAIN_DATA_PATH, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
-            x_test = create_test_arrays(TEST_DATA_PATH, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
-            np.save('numpy_data/x_train', x_train)
-            np.save('numpy_data/y_train', y_train)
-            np.save('numpy_data/x_test', x_test)
+            x_train, y_train = create_train_arrays(DATA_PATH, LABEL_PATH, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
+            # x_test = create_test_arrays(TEST_DATA_PATH, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
+            # train_ids, valid_ids = create_ids(TRAIN_DATA_PATH, VALID_SPLIT)
+            np.save(DATA_SAVE + 'x_train' + SAVE_POSTFIX, x_train)
+            np.save(DATA_SAVE + 'y_train' + SAVE_POSTFIX, y_train)
+            # np.save(DATA_SAVE + 'x_test' + SAVE_POSTFIX, x_test)
+            print('Numpy arrays saved')
 
         elif state == 'load_data':
             # Load numpy arrays
-            x_train = np.load('numpy_data/x_train.npy')
-            y_train = np.load('numpy_data/y_train.npy')
-            x_test = np.load('numpy_data/x_test.npy')
+            x_train = np.load(DATA_SAVE + 'x_train' + SAVE_POSTFIX + '.npy')
+            y_train = np.load(DATA_SAVE + 'y_train' + SAVE_POSTFIX + '.npy')
+            # x_test = np.load(DATA_SAVE + 'x_test' + SAVE_POSTFIX + '.npy')
+            print(np.shape(x_train))
+            print(np.shape(y_train))
+            # print(np.shape(x_test))
+            print('Data loaded')
 
         elif state == 'train':
             # Use create_generators to make the generators for the model training
             train_generator, val_generator = create_generators(x_train, y_train, VALID_SPLIT, BATCH_SIZE)
+            # params = {'dim': (IMG_HEIGHT, IMG_WIDTH),
+            #          'batch_size': BATCH_SIZE,
+            #          'n_channels': IMG_CHANNELS,
+            #          'shuffle': True}
+            # train_generator = DataGenerator(train_ids, **params)
+            # val_generator = DataGenerator(valid_ids, **params)
+            print('Generators created')
 
             # Create the UNet Architecture model
             model = create_unet(IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
+            print('CNN Model created')
 
             # Using Image Generators with a 10% validation split
-            results = model.fit(train_generator, validation_data=val_generator, validation_steps=10,
-                                steps_per_epoch=250, epochs=EPOCHS, callbacks=callbacks, verbose=1)
+            results = model.fit(train_generator, validation_data=val_generator, steps_per_epoch=4000, epochs=EPOCHS,
+                                validation_steps=400, callbacks=callbacks, verbose=1)
+            print('Model trained')
 
             # Save model
-            model.save("saved_models/model.h5")
+            model.save(MODEL_SAVE + SAVE_POSTFIX + '.h5')
+            print('Model saved')
 
         elif state == 'load_model':
             # Load model
-            model = load_model('saved_models/model.h5')
+            model = load_model(MODEL_SAVE + SAVE_POSTFIX + '.h5')
+            print('Model loaded')
 
         elif state == 'test':
-            # Select test type
+            # Select test and data type
             test_type = input('Select test type: (basic, watershed)')
+            data_type = input('Select data type: (train, test)')
 
-            # Check if data is loaded
-            if x_test is None:
+            # Allocate data type
+            if data_type == 'train':
+                data_in = x_train
+            elif data_type == 'test':
+                data_in = x_test
+            else:
+                continue
+
+            # Check if data is loaded, if so, use chosen test
+            if x_train is None:
                 print('Data not yet loaded')
             elif test_type == 'basic':
-                pred_show(x_test, model)
+                pred_show(data_in, model)
             elif test_type == 'watershed':
-                watershed_pred(x_test, model, 0)
+                watershed_pred(data_in, model, 0)  # Currently set to random image
+
+        elif state == 'check':
+            check_data(x_train, y_train)
