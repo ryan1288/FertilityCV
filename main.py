@@ -33,15 +33,13 @@ METRIC_DISTANCE = 5
 # Dataset paths
 DATA_RAW_PATH = 'Data_Full/'
 LABEL_RAW_PATH = 'Label_Full/'
-SIZED_DATA_PATH = 'Data_5x/'
-SIZED_LABEL_PATH = 'Label_5x/'
-DATA_PATH = 'Data_Filtered_5x/'
-LABEL_PATH = 'Label_Filtered_5x/'
+SIZED_DATA_PATH = 'Data/'
+SIZED_LABEL_PATH = 'Label/'
+DATA_PATH = 'Data_Filtered/'
+LABEL_PATH = 'Label_Filtered/'
 DATA_SAVE = 'numpy_data/'
 MODEL_SAVE = 'saved_models/model'
-SAVE_POSTFIX = '_filtered_5x'
-
-TEST_DATA_PATH = 'Data/'
+SAVE_POSTFIX = ''
 
 # Checkpoints to keep the best weights
 checkpoint_path = "checkpoints/test.ckpt"
