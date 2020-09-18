@@ -1,8 +1,43 @@
 import tensorflow as tf
+import numpy as np
+import tensorflow.python.keras.backend as k
+
 
 from tensorflow.keras.layers import Input, Lambda, Conv2D, Dropout, MaxPooling2D, Conv2DTranspose, concatenate
 from tensorflow.keras.metrics import MeanIoU
 from tensorflow.keras import Model
+
+
+# Purpose: Custom Keras loss to train with weighted sperm cell labels to have more importance
+# Parameters:
+#   y_true: ground truth label
+#   y_pred: predicted label
+#   weight: pre-calculated ratio of background to sperm labelled pixels
+def weighted_binary_crossentropy(y_true, y_pred, weight=151.49183627547222):
+    y_true = k.clip(y_true, k.epsilon(), 1-k.epsilon())
+    y_pred = k.clip(y_pred, k.epsilon(), 1-k.epsilon())
+    logloss = -(y_true * k.log(y_pred) * weight + (1 - y_true) * k.log(1 - y_pred))
+    return k.mean(logloss, axis=-1)
+
+
+# Purpose: Scale-invariant metric that uses overlaps similar to MeanIoU
+# Parameters:
+#   y_true: ground truth label
+#   y_pred: predicted label
+#   smooth: smooths out coefficient parameter in the denominator
+def dice_coef(y_true, y_pred, smooth=1):
+    intersection = k.sum(k.abs(y_true * y_pred), axis=-1)
+    return (2. * intersection + smooth) / (k.sum(k.square(y_true), -1) + k.sum(k.square(y_pred), -1) + smooth)
+
+
+# Purpose: Calculate and output ratios of class types in all labels of a dataset
+# Parameters:
+#   y_train: training label dataset
+def calculate_weight(y_train):
+    positive_label_ratio = np.sum(y_train)/np.size(y_train)
+    print('Ratio of + labels to full dataset: ' + str(positive_label_ratio))
+    negative_to_positive = (1 - positive_label_ratio)/positive_label_ratio
+    print('Ratio of - labels to + labels: ' + str(negative_to_positive))
 
 
 # Purpose: U-Net Architecture with 'same' padding modification and elu activation
@@ -12,7 +47,7 @@ from tensorflow.keras import Model
 def create_unet(width, height, channels):
     # Encoder: Input with normalization into [0,1] for a color (3-channel) image with specified width and height
     inputs = Input((width, height, channels))
-    norm = Lambda(lambda x: x / 127.5 - 1)(inputs)  # Change to [-1, 1]
+    norm = Lambda(lambda x: x / 127.5 - 1)(inputs)
 
     # Five cycles of Convolution -> Dropout -> Convolution -> Max Pooling with ELU activations
     c1 = Conv2D(16, (3, 3), activation=tf.keras.activations.elu, kernel_initializer='he_normal', padding='same')(norm)
@@ -69,7 +104,7 @@ def create_unet(width, height, channels):
 
     # Set model with Adam Optimizer
     model = Model(inputs=[inputs], outputs=[outputs])
-    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy', MeanIoU(num_classes=2)])
+    model.compile(optimizer='adam', loss=weighted_binary_crossentropy, metrics=['accuracy', dice_coef])
     model.summary()
     # Can adjust additional parameters on the adam
 
