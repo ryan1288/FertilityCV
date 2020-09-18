@@ -13,7 +13,7 @@ from tensorflow.keras.callbacks import EarlyStopping, TensorBoard, ModelCheckpoi
 # User-defined functions
 from datagen import create_test_arrays, create_train_arrays, create_generators, create_ids  # data importer functions
 from model import create_unet, calculate_weight, weighted_binary_crossentropy, dice_coef  # U-Net CNN model & tools
-from tools import pred_show, watershed_pred, label_measure, metrics, metric  # Test model prediction
+from tools import pred_show, watershed_pred, metrics  # Test model prediction
 from data import slice_data, check_data, blank_filter  # Data manipulation tools
 from generator import DataGenerator  # Sequence data generator class
 
@@ -131,20 +131,9 @@ if __name__ == '__main__':
             np.save(DATA_SAVE + 'predicted_counts' + SAVE_POSTFIX, predicted_counts)
             print('Counted ground truth and predicted sperm #')
 
-        elif state == 'load_count':
-            # Load numpy arrays
-            watershed_counts = np.load(DATA_SAVE + 'watershed_counts' + SAVE_POSTFIX + '.npy')
-            predicted_counts = np.load(DATA_SAVE + 'predicted_counts' + SAVE_POSTFIX + '.npy')
-            print(np.shape(watershed_counts))
-            print(np.shape(predicted_counts))
-
         elif state == 'metrics':
-            # Display custom metric values
-            metrics(watershed_counts, predicted_counts)
-
-        elif state == 'F1':
-            metric(DATA_PATH, LABEL_PATH, 'Label/', RESIZE_IMG_HEIGHT, RESIZE_IMG_WIDTH, IMG_HEIGHT, IMG_WIDTH,
-                   METRIC_DISTANCE)
+            metrics(DATA_PATH, LABEL_PATH, 'Label/', RESIZE_IMG_HEIGHT, RESIZE_IMG_WIDTH, IMG_HEIGHT, IMG_WIDTH,
+                    METRIC_DISTANCE)
 
         elif state == 'test':
             # Select test and data type
@@ -160,20 +149,3 @@ if __name__ == '__main__':
 
         elif state == 'check':
             check_data(x_train, y_train)
-
-        elif state == 'q':
-            co_xy = list()
-            co_xy.append((1, 2))
-            co_xy.append((3, 4))
-            co_xy.append((6, 7))
-            co_xy.append((9, 10))
-            tree = spatial.KDTree(co_xy)
-            near = tree.query([(3.5, 3.5)])
-            print(near)
-            print(co_xy)
-            print(near[0] < 0.5)
-            del co_xy[int(near[1])]
-            print(co_xy)
-            tree = spatial.KDTree(co_xy)
-            near = tree.query([(3.5, 3.5)])
-            print(near)

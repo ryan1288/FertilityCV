@@ -124,74 +124,6 @@ def watershed_pred(x_test, y_test, model):
     plt.show()
 
 
-# Purpose: Create associated labels with each ground truth image
-# Parameters:
-#   x_train: testing dataset
-#   y_train: training label
-#   model: trained U-Net model
-def label_measure(x_train, y_train, model):
-    # Initialize empty lists
-    watershed_counts = []
-    predicted_counts = []
-
-    for idx in tqdm(range(y_train.shape[0])):
-        # Extract an image, first the label then the training image
-        label = y_train[idx, :, :, :]
-        image = np.squeeze(label)
-
-        # Append sperm count
-        watershed_counts.append(count(image, min_distance))
-
-        # Perform prediction and then counting for input data
-        x_img = np.array(x_train[idx])
-        x_img = np.expand_dims(x_img, axis=0)
-        predict = model.predict(x_img, verbose=0)
-
-        # Current prediction set to be above 50% confidence
-        predict = (predict > predict_threshold).astype(np.uint8)
-
-        # Create numpy image to be used in watershed
-        image = np.squeeze(predict[0])
-
-        # Append sperm count
-        predicted_counts.append(count(image, min_distance))
-
-    # Save as numpy arrays
-    return np.array(watershed_counts), np.array(predicted_counts)
-
-
-# Purpose: Calculate metrics based on predicted counts for both ground truth and predictions
-# Parameters:
-#   watershed_counts: ground truth label counts
-#   predicted_counts: predicted counts
-def metrics(watershed_counts, predicted_counts):
-    size = watershed_counts.size
-
-    # Calculate ratio of predicted vs labeled sperm
-    overall_ratio = np.sum(predicted_counts)/np.sum(watershed_counts)
-    print('Overall ratio of predicted sperm/label sperm: ' + str(overall_ratio))
-
-    # Calculate a difference array
-    diff_counts = predicted_counts - watershed_counts
-
-    # Number of equal, under, and overestimates
-    over = (diff_counts > 0).sum()
-    equal = (diff_counts == 0).sum()
-    under = (diff_counts < 0).sum()
-    mean = np.mean(diff_counts)
-    std = np.std(diff_counts)
-    max_diff = np.max(diff_counts)
-    max_neg_diff = np.min(diff_counts)
-    print('% of overestimates: ' + str(over / size))
-    print('% of correct estimates: ' + str(equal / size))
-    print('% of underestimates: ' + str(under / size))
-    print('Mean of difference between predicted & labels: ' + str(mean))
-    print('Standard deviation of difference between predicted & labels: ' + str(std))
-    print('Max (+ and -) difference: ' + str(max_diff) + ' and ' + str(max_neg_diff))
-
-    return overall_ratio
-
-
 # Purpose: Use watershed to predict the number of sperm with coordinates
 # Parameters:
 #   image: label to count
@@ -232,7 +164,7 @@ def count(image, min_dist):
 
 
 # Purpose: Traverse the directory to match labels with the predicted ground truths at 20x
-def metric(data_path, label_predict, label_truth, height, width, height_final, width_final, distance_threshold):
+def metrics(data_path, label_predict, label_truth, height, width, height_final, width_final, distance_threshold):
     # Determine scale of metric to calculate
     scale = input('Metric scale: (single, full)')
 
