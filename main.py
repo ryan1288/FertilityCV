@@ -6,7 +6,6 @@ import tensorflow as tf  # Tensorflow including the Keras package within
 import os  # os to access and use directories
 import numpy as np  # numpy for array operations
 
-from scipy import spatial
 from tensorflow.keras.models import load_model  # Load saved model
 from tensorflow.keras.callbacks import EarlyStopping, TensorBoard, ModelCheckpoint  # Callbacks to save/evaluate
 
@@ -20,8 +19,8 @@ from generator import DataGenerator  # Sequence data generator class
 # Constants
 RAW_IMG_HEIGHT = 1040
 RAW_IMG_WIDTH = 1392
-RESIZE_IMG_HEIGHT = 1024
-RESIZE_IMG_WIDTH = 1024
+RESIZE_IMG_HEIGHT = 512
+RESIZE_IMG_WIDTH = 512
 IMG_HEIGHT = 256
 IMG_WIDTH = 256
 IMG_CHANNELS = 3
@@ -33,13 +32,13 @@ METRIC_DISTANCE = 5
 # Dataset paths
 DATA_RAW_PATH = 'Data_Full/'
 LABEL_RAW_PATH = 'Label_Full/'
-SIZED_DATA_PATH = 'Data/'
-SIZED_LABEL_PATH = 'Label/'
-DATA_PATH = 'Data_Filtered/'
-LABEL_PATH = 'Label_Filtered/'
+SIZED_DATA_PATH = 'Data_10x/'
+SIZED_LABEL_PATH = 'Label_10x/'
+DATA_PATH = 'Data_Filtered_10x/'
+LABEL_PATH = 'Label_Filtered_10x/'
 DATA_SAVE = 'numpy_data/'
 MODEL_SAVE = 'saved_models/model'
-SAVE_POSTFIX = ''
+SAVE_POSTFIX = '_10x'
 
 # Checkpoints to keep the best weights
 checkpoint_path = "checkpoints/test.ckpt"
@@ -109,8 +108,8 @@ if __name__ == '__main__':
             print('CNN Model created')
 
             # Using Image Generators with a 10% validation split
-            results = model.fit(train_generator, validation_data=val_generator, steps_per_epoch=1900, epochs=EPOCHS,
-                                validation_steps=190, callbacks=callbacks, verbose=1)
+            results = model.fit(train_generator, validation_data=val_generator, steps_per_epoch=2000, epochs=EPOCHS,
+                                validation_steps=200, callbacks=callbacks, verbose=1)
             print('Model trained')
 
             # Save model

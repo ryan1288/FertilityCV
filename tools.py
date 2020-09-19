@@ -241,6 +241,7 @@ def count_metric(height_ratio, width_ratio, height, width, label, ground_truth, 
     tp = 0
     fp = 0
 
+    # Loop through every truth image and append the found coordinates
     for i in range(height_ratio):
         for j in range(width_ratio):
             idx = i * width_ratio + j
@@ -250,6 +251,7 @@ def count_metric(height_ratio, width_ratio, height, width, label, ground_truth, 
                 coord_y = coord[1] / height_ratio + i * (height / height_ratio)
                 truth_xy.append((coord_x, coord_y))
 
+    # Create a tree and then use it to find the nearest spatial coordinate until there are no more values left
     if len(truth_xy) > 1:
         truth_tree = spatial.KDTree(truth_xy)
     while label_xy:
@@ -261,6 +263,7 @@ def count_metric(height_ratio, width_ratio, height, width, label, ground_truth, 
             nearest[0] = sqrt(pow(predicted_xy[0] - truth_xy[0][0], 2) + pow(predicted_xy[1] - truth_xy[0][1], 2))
             nearest[1] = 0
 
+        # Only accept values within a distance threshold, then draw it on the image if only checking a single image
         if len(truth_xy) > 0 and nearest[0] < distance_threshold:
             if scale == 'single':
                 cv2.circle(pic, (int(predicted_xy[0]), int(predicted_xy[1])), distance_threshold - 1, (0, 255, 0), 1)
@@ -268,6 +271,7 @@ def count_metric(height_ratio, width_ratio, height, width, label, ground_truth, 
             tp += 1
             if len(truth_xy) > 1:
                 truth_tree = spatial.KDTree(truth_xy)
+        # Otherwise, it's a false positive if there are no nearby true coordinates
         else:
             if scale == 'single':
                 cv2.circle(pic, (int(predicted_xy[0]), int(predicted_xy[1])), distance_threshold - 1, (0, 0, 255), 1)
@@ -289,6 +293,7 @@ def count_metric(height_ratio, width_ratio, height, width, label, ground_truth, 
         recall = 0
         f1 = 0
 
+    # Return the drawn image and metrics if evaluating a single image, otherwise, provide values to accumulate
     if scale == 'single':
         return precision, recall, f1, pic
     else:

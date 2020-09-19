@@ -95,7 +95,7 @@ def create_test_arrays(data_path, height, width, channels):
 #   batch_size: size of batch when training
 def create_generators(x_train, y_train, valid_split, batch_size):
     # Seeds for consistent runs for debugging (optional)
-    seed = 13  # random.seed()
+    seed = 27  # Arbitrary value
 
     # Create generators that will augment the data for each epoch
     image_gen = tf.keras.preprocessing.image.ImageDataGenerator(rotation_range=50, zoom_range=0.2,
