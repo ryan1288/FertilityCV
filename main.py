@@ -10,11 +10,10 @@ from tensorflow.keras.models import load_model  # Load saved model
 from tensorflow.keras.callbacks import EarlyStopping, TensorBoard, ModelCheckpoint  # Callbacks to save/evaluate
 
 # User-defined functions
-from datagen import create_test_arrays, create_train_arrays, create_generators, create_ids  # data importer functions
+from datagen import create_train_arrays, create_generators  # data importer functions
 from model import create_unet, calculate_weight, weighted_binary_crossentropy, dice_coef  # U-Net CNN model & tools
 from tools import pred_show, watershed_pred, metrics  # Test model prediction
 from data import slice_data, check_data, blank_filter  # Data manipulation tools
-from generator import DataGenerator  # Sequence data generator class
 
 # Constants
 RAW_IMG_HEIGHT = 1040
@@ -77,7 +76,9 @@ if __name__ == '__main__':
             print('Sliced images')
 
         elif state == 'filter':
-            blank_filter(SIZED_DATA_PATH, SIZED_LABEL_PATH, DATA_PATH, LABEL_PATH, IMG_HEIGHT, IMG_WIDTH)
+            # Filters out empty labels and evident outliers (large white blobs covering > 25% of the label)
+            blank_filter(SIZED_DATA_PATH, SIZED_LABEL_PATH, DATA_PATH, LABEL_PATH, RESIZE_IMG_HEIGHT, RESIZE_IMG_WIDTH,
+                         IMG_HEIGHT, IMG_WIDTH)
             print('Filtered blank images')
 
         elif state == 'data':
@@ -96,6 +97,7 @@ if __name__ == '__main__':
             print('Data loaded')
 
         elif state == 'weight':
+            # Calculate the weight ratio of background/sperm for training
             calculate_weight(y_train)
 
         elif state == 'train':
@@ -123,14 +125,8 @@ if __name__ == '__main__':
                                                'dice_coef': dice_coef})
             print('Model loaded')
 
-        elif state == 'count':
-            # Count sperm
-            watershed_counts, predicted_counts = label_measure(x_train, y_train, model)
-            np.save(DATA_SAVE + 'watershed_counts' + SAVE_POSTFIX, watershed_counts)
-            np.save(DATA_SAVE + 'predicted_counts' + SAVE_POSTFIX, predicted_counts)
-            print('Counted ground truth and predicted sperm #')
-
         elif state == 'metrics':
+            # Calculates precision/recall based on a single image or the full dataset
             metrics(DATA_PATH, LABEL_PATH, 'Label/', RESIZE_IMG_HEIGHT, RESIZE_IMG_WIDTH, IMG_HEIGHT, IMG_WIDTH,
                     METRIC_DISTANCE)
 
@@ -147,4 +143,5 @@ if __name__ == '__main__':
                 watershed_pred(x_train, y_train, model)
 
         elif state == 'check':
+            # Check input data to visualize as images and values
             check_data(x_train, y_train)

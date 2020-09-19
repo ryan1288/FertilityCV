@@ -3,9 +3,8 @@ import numpy as np
 import tensorflow as tf
 
 from tqdm import tqdm  # progress bars on database extraction
-from skimage.io import imread, imsave  # show images as windows
+from skimage.io import imread  # show images as windows
 from skimage.transform import resize  # resize images
-import random  # change training seed
 
 
 # Purpose: Access directories to extract, resize, and transform datasets into numpy arrays
@@ -132,6 +131,7 @@ def create_generators(x_train, y_train, valid_split, batch_size):
                               seed=seed)
     print('Validation Data Fitted')
 
+    # Zip the generators for use in training
     train_generator = zip(x, y)
     val_generator = zip(x_val, y_val)
 

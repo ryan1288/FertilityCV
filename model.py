@@ -3,9 +3,8 @@ import numpy as np
 import tensorflow.python.keras.backend as k
 
 
-from tensorflow.keras.layers import Input, Lambda, Conv2D, Dropout, MaxPooling2D, Conv2DTranspose, concatenate
-from tensorflow.keras.metrics import MeanIoU
-from tensorflow.keras import Model
+from tensorflow.keras.layers import Input, Lambda, Conv2D, Dropout, MaxPooling2D, Conv2DTranspose, concatenate  # Model
+from tensorflow.keras import Model  # Compile and show summary of model
 
 
 # Purpose: Custom Keras loss to train with weighted sperm cell labels to have more importance
@@ -34,8 +33,11 @@ def dice_coef(y_true, y_pred, smooth=1):
 # Parameters:
 #   y_train: training label dataset
 def calculate_weight(y_train):
+    # Preliminary step to calculating ratio of - to + labels
     positive_label_ratio = np.sum(y_train)/np.size(y_train)
     print('Ratio of + labels to full dataset: ' + str(positive_label_ratio))
+
+    # Used to train the model
     negative_to_positive = (1 - positive_label_ratio)/positive_label_ratio
     print('Ratio of - labels to + labels: ' + str(negative_to_positive))
 
@@ -106,6 +108,5 @@ def create_unet(width, height, channels):
     model = Model(inputs=[inputs], outputs=[outputs])
     model.compile(optimizer='adam', loss=weighted_binary_crossentropy, metrics=['accuracy', dice_coef])
     model.summary()
-    # Can adjust additional parameters on the adam
 
     return model

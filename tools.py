@@ -6,14 +6,13 @@ import numpy as np
 import random
 
 from tqdm import tqdm  # progress bars on database extraction
-from skimage.transform import resize  # resize images
-from skimage.color import gray2rgb
+from skimage.color import gray2rgb  # Convert single
 from skimage.io import imshow, imread  # show images as windows
 from skimage.feature import peak_local_max  # Use euclidian distances to find local maxes
 from skimage.segmentation import watershed  # Watershed tool to find labels
 from scipy import ndimage  # Part of watershed calculation to find markers
-from scipy import spatial
-from math import sqrt, pow
+from scipy import spatial  # KD Tree used to locate the nearest sperm in the label
+from math import sqrt, pow  # Math functions to manually calculate the distances if there is only one label
 
 # Constant for thresholding sperm counting
 predict_threshold = 0.955
@@ -25,7 +24,7 @@ min_distance = 4
 #   x_test: testing dataset
 #   model: CNN model used
 def pred_show(x_test, model):
-    # Predict random example microscopy image from test set
+    # Have a random or chosen predicted image
     index_type = input('Choose index type (random, chosen)')
     if index_type == 'random':
         idx = random.randint(0, len(x_test))
@@ -33,6 +32,8 @@ def pred_show(x_test, model):
         idx = int(input('Select index: '))
     else:
         return
+
+    # Obtain teh image, and show the prediction values
     x = np.array(x_test[idx])
     x = np.expand_dims(x, axis=0)
     predict = model.predict(x, verbose=1)
@@ -60,7 +61,7 @@ def pred_show(x_test, model):
 #   model: CNN model used
 #   idx: index of test data to be segmented
 def watershed_pred(x_test, y_test, model):
-    # Predict random example microscopy image from test set
+    # Have a random or chosen predicted image
     index_type = input('Choose index type (random, chosen)')
     if index_type == 'random':
         idx = random.randint(0, len(x_test))
@@ -68,10 +69,14 @@ def watershed_pred(x_test, y_test, model):
         idx = int(input('Select index: '))
     else:
         return
+
+    # Get the image from the data set
     x_img = np.array(x_test[idx])
     y_img = np.array(y_test[idx])
     x_img_cpy = np.copy(x_img)
     x_img_exp = np.expand_dims(x_img_cpy, axis=0)
+
+    # Predict using the trained model
     predict = model.predict(x_img_exp, verbose=1)
 
     # Current prediction set to be above 50% confidence
@@ -254,10 +259,15 @@ def count_metric(height_ratio, width_ratio, height, width, label, ground_truth, 
     # Create a tree and then use it to find the nearest spatial coordinate until there are no more values left
     if len(truth_xy) > 1:
         truth_tree = spatial.KDTree(truth_xy)
+
+    # Continue as long as there is a predicted sperm coordinate left
     while label_xy:
         predicted_xy = label_xy.pop()
+
+        # Use the KD spatial tree if there is more tha none node
         if len(truth_xy) > 1:
             nearest = truth_tree.query(predicted_xy)
+        # Otheruse use manual calculations
         elif len(truth_xy) == 1:
             nearest = [0, 0]
             nearest[0] = sqrt(pow(predicted_xy[0] - truth_xy[0][0], 2) + pow(predicted_xy[1] - truth_xy[0][1], 2))
@@ -267,10 +277,12 @@ def count_metric(height_ratio, width_ratio, height, width, label, ground_truth, 
         if len(truth_xy) > 0 and nearest[0] < distance_threshold:
             if scale == 'single':
                 cv2.circle(pic, (int(predicted_xy[0]), int(predicted_xy[1])), distance_threshold - 1, (0, 255, 0), 1)
+            # Remove the found positive label
             del truth_xy[int(nearest[1])]
-            tp += 1
+            # Re-generate a KD tree
             if len(truth_xy) > 1:
                 truth_tree = spatial.KDTree(truth_xy)
+            tp += 1
         # Otherwise, it's a false positive if there are no nearby true coordinates
         else:
             if scale == 'single':
@@ -288,6 +300,7 @@ def count_metric(height_ratio, width_ratio, height, width, label, ground_truth, 
         precision = tp / (tp + fp)
         recall = tp / (tp + fn)
         f1 = 2 * (precision * recall) / (precision + recall)
+    # Case where there were no true positives, 0 scores
     else:
         precision = 0
         recall = 0

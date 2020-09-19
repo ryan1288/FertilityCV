@@ -64,12 +64,17 @@ def slice_data(data_from, label_from, data_to, label_to, height, width, height_f
 #   x_train: numpy array of input data
 #   y_train: numpy array of input masks
 def check_data(x_train, y_train):
-    idx = random.randint(0, 100)
+    # Generate a random index in the dataset
+    idx = random.randint(0, len(x_train))
+
+    # Show the random image pair of bright field and label
     plt.figure(1)
     imshow(x_train[idx])
     plt.figure(2)
     imshow(y_train[idx])
     plt.show()
+
+    # Show sample data values from the sample image pair
     print(x_train[idx, :, :, 0])
     print(y_train[idx, :, :, 0])
 
@@ -82,7 +87,7 @@ def check_data(x_train, y_train):
 #   label_to: filtered mask path
 #   height: image height
 #   width: image width
-def blank_filter(data_from, label_from, data_to, label_to, height, width):
+def blank_filter(data_from, label_from, data_to, label_to, resized_height, resized_width, height, width):
     # Assign image ids through the directory
     masklist = os.listdir(label_from)
 
@@ -94,11 +99,12 @@ def blank_filter(data_from, label_from, data_to, label_to, height, width):
         # Count of positive labelled pixels
         pos_count = np.count_nonzero(mask_img)
 
-        # Must include at least one sperm in the label, a sperm is ~12x12 (normal), ~6x6 (10x), ~3x3 (5x)
+        # Must include at least one sperm in the label, a sperm is ~12x12 (20x), ~6x6 (10x), ~3x3 (5x)
         # Also filter out white images where more than quarter of the label is white
-        if 5 < pos_count < (height * width) / 4:
+        if int(resized_height / height * resized_width / width * 5) < pos_count < (height * width) / 4:
             imsave(label_to + mask, mask_img, check_contrast=False)
 
+            # If the data is good, copy the BF image over as well
             image = mask[:-8] + 'BF.png'
             image_path = data_from + image
             raw_image = imread(image_path)
