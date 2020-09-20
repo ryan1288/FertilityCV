@@ -11,7 +11,7 @@ from tensorflow.keras.callbacks import EarlyStopping, TensorBoard, ModelCheckpoi
 
 # User-defined functions
 from datagen import create_train_arrays, create_generators  # data importer functions
-from model import create_unet, calculate_weight, weighted_binary_crossentropy, dice_coef  # U-Net CNN model & tools
+from model import create_unet, calculate_weight, weighted_binary_crossentropy, dice_coef, evaluate_model  # U-Net CNN
 from tools import pred_show, watershed_pred, metrics  # Test model prediction
 from data import slice_data, check_data, blank_filter  # Data manipulation tools
 
@@ -24,7 +24,7 @@ IMG_HEIGHT = 256
 IMG_WIDTH = 256
 IMG_CHANNELS = 3
 BATCH_SIZE = 4
-EPOCHS = 10
+EPOCHS = 5
 VALID_SPLIT = 0.1
 METRIC_DISTANCE = 5
 
@@ -66,8 +66,8 @@ if __name__ == '__main__':
     # Prompt until program is terminated
     while state != 'exit':
         # Select starting state
-        state = input('Select mode: (slice, filter, data, load_data, weight, train, load_model, count, '
-                      'load_count, metrics, test, check, exit)')
+        state = input('Select mode: (slice, filter, data, load_data, weight, generator, train, load_model, evaluate, '
+                      'metrics, test, check, exit)')
 
         if state == 'slice':
             # Cuts up image into desired final dimensions
@@ -100,11 +100,12 @@ if __name__ == '__main__':
             # Calculate the weight ratio of background/sperm for training
             calculate_weight(y_train)
 
-        elif state == 'train':
+        elif state == 'generator':
             # Use create_generators to make the generators for the model training
             train_generator, val_generator = create_generators(x_train, y_train, VALID_SPLIT, BATCH_SIZE)
             print('Generators created')
 
+        elif state == 'train':
             # Create the UNet Architecture model
             model = create_unet(IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
             print('CNN Model created')
@@ -124,6 +125,12 @@ if __name__ == '__main__':
                                custom_objects={'weighted_binary_crossentropy': weighted_binary_crossentropy,
                                                'dice_coef': dice_coef})
             print('Model loaded')
+
+        elif state == 'evaluate':
+            # Evaluate model using validation data generator
+            results = evaluate_model(model, val_generator, BATCH_SIZE)
+            print('Completed Evaluation')
+            print(results)
 
         elif state == 'metrics':
             # Calculates precision/recall based on a single image or the full dataset

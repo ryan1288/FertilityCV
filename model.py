@@ -110,3 +110,9 @@ def create_unet(width, height, channels):
     model.summary()
 
     return model
+
+
+def evaluate_model(model, val_generator, batch_size):
+    # Evaluate using model.evaluate using the entire generator set
+    results = model.evaluate(val_generator, batch_size=batch_size)
+    return results
