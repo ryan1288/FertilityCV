@@ -112,6 +112,11 @@ def create_unet(width, height, channels):
     return model
 
 
+# Purpose: Evaluate the model using the model.evaluate function
+# Parameters:
+#   model: trained model to be evaluated
+#   val_generator: generate validation data to predict
+#   batch_size: same batch size as the training
 def evaluate_model(model, val_generator, batch_size):
     # Evaluate using model.evaluate using the entire generator set
     results = model.evaluate(val_generator, batch_size=batch_size)

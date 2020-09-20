@@ -12,32 +12,34 @@ from tensorflow.keras.callbacks import EarlyStopping, TensorBoard, ModelCheckpoi
 # User-defined functions
 from datagen import create_train_arrays, create_generators  # data importer functions
 from model import create_unet, calculate_weight, weighted_binary_crossentropy, dice_coef, evaluate_model  # U-Net CNN
-from tools import pred_show, watershed_pred, metrics  # Test model prediction
+from tools import pred_show, watershed_pred, metrics, predict_set  # Test model prediction
 from data import slice_data, check_data, blank_filter  # Data manipulation tools
 
 # Constants
+MAGNIFICATION = 10
 RAW_IMG_HEIGHT = 1040
 RAW_IMG_WIDTH = 1392
-RESIZE_IMG_HEIGHT = 512
-RESIZE_IMG_WIDTH = 512
+RESIZE_IMG_HEIGHT = MAGNIFICATION / 20 * 1024
+RESIZE_IMG_WIDTH = MAGNIFICATION / 20 * 1024
 IMG_HEIGHT = 256
 IMG_WIDTH = 256
 IMG_CHANNELS = 3
 BATCH_SIZE = 4
-EPOCHS = 5
+EPOCHS = 20
 VALID_SPLIT = 0.1
 METRIC_DISTANCE = 5
 
 # Dataset paths
 DATA_RAW_PATH = 'Data_Full/'
 LABEL_RAW_PATH = 'Label_Full/'
-SIZED_DATA_PATH = 'Data_10x/'
-SIZED_LABEL_PATH = 'Label_10x/'
-DATA_PATH = 'Data_Filtered_10x/'
-LABEL_PATH = 'Label_Filtered_10x/'
+SIZED_DATA_PATH = 'Data_' + str(MAGNIFICATION) + 'x/'
+SIZED_LABEL_PATH = 'Label_' + str(MAGNIFICATION) + 'x/'
+DATA_PATH = 'Data_Filtered_' + str(MAGNIFICATION) + 'x/'
+LABEL_PATH = 'Label_Filtered_' + str(MAGNIFICATION) + 'x/'
+PREDICT_PATH = 'Predict_' + str(MAGNIFICATION) + 'x/'
 DATA_SAVE = 'numpy_data/'
 MODEL_SAVE = 'saved_models/model'
-SAVE_POSTFIX = '_10x'
+SAVE_POSTFIX = '_' + str(MAGNIFICATION) + 'x'
 
 # Checkpoints to keep the best weights
 checkpoint_path = "checkpoints/test.ckpt"
@@ -51,7 +53,7 @@ callbacks = [
 ]
 
 # Initialize dataset variables
-x_test = x_train = y_train = model = watershed_counts = None
+x_test = x_train = y_train = model = watershed_counts = train_generator = val_generator = None
 
 # Set GPU memory growth
 physical_devices = tf.config.experimental.list_physical_devices('GPU')
@@ -67,7 +69,7 @@ if __name__ == '__main__':
     while state != 'exit':
         # Select starting state
         state = input('Select mode: (slice, filter, data, load_data, weight, generator, train, load_model, evaluate, '
-                      'metrics, test, check, exit)')
+                      'metrics, test, check, predict, exit)')
 
         if state == 'slice':
             # Cuts up image into desired final dimensions
@@ -152,3 +154,6 @@ if __name__ == '__main__':
         elif state == 'check':
             # Check input data to visualize as images and values
             check_data(x_train, y_train)
+
+        elif state == 'predict':
+            predict_set(model, SIZED_DATA_PATH, PREDICT_PATH)

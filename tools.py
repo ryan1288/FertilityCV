@@ -7,7 +7,7 @@ import random
 
 from tqdm import tqdm  # progress bars on database extraction
 from skimage.color import gray2rgb  # Convert single
-from skimage.io import imshow, imread  # show images as windows
+from skimage.io import imshow, imread, imsave  # Show, read, and save images
 from skimage.feature import peak_local_max  # Use euclidian distances to find local maxes
 from skimage.segmentation import watershed  # Watershed tool to find labels
 from scipy import ndimage  # Part of watershed calculation to find markers
@@ -16,7 +16,7 @@ from math import sqrt, pow  # Math functions to manually calculate the distances
 
 # Constant for thresholding sperm counting
 predict_threshold = 0.955
-min_distance = 4
+min_distance = 3
 
 
 # Purpose: Basic mask model prediction output
@@ -41,7 +41,7 @@ def pred_show(x_test, model):
     print(np.shape(predict))
     print(predict[0, :, :, 0])
 
-    # Current prediction set to be above 50% confidence
+    # Current prediction set to be above a set confidence
     print('Post-conversion')
     predict = (predict > predict_threshold).astype(np.uint8)
     print(np.shape(predict))
@@ -79,7 +79,7 @@ def watershed_pred(x_test, y_test, model):
     # Predict using the trained model
     predict = model.predict(x_img_exp, verbose=1)
 
-    # Current prediction set to be above 50% confidence
+    # Current prediction set to be above a set confidence
     predict = (predict > predict_threshold).astype(np.uint8)
 
     # Create numpy image to be used in watershed
@@ -267,7 +267,7 @@ def count_metric(height_ratio, width_ratio, height, width, label, ground_truth, 
         # Use the KD spatial tree if there is more tha none node
         if len(truth_xy) > 1:
             nearest = truth_tree.query(predicted_xy)
-        # Otheruse use manual calculations
+        # Otherwise, use use manual calculations
         elif len(truth_xy) == 1:
             nearest = [0, 0]
             nearest[0] = sqrt(pow(predicted_xy[0] - truth_xy[0][0], 2) + pow(predicted_xy[1] - truth_xy[0][1], 2))
@@ -311,3 +311,22 @@ def count_metric(height_ratio, width_ratio, height, width, label, ground_truth, 
         return precision, recall, f1, pic
     else:
         return tp, fp, fn
+
+
+# Purpose: Evaluate the model using the model.evaluate function
+# Parameters:
+#   model: trained model used to predict images
+#   data_from: data path to obtain images and names from
+#   predict_to: data path to store predicted labels
+def predict_set(model, data_from, predict_to):
+    # Create an iterable list through the directory
+    imagelist = os.listdir(data_from)
+
+    # Loop through every image using given path and unique folder identifier
+    for image in tqdm(imagelist):
+        path = data_from + image
+        img = imread(path)
+        img = np.expand_dims(img, axis=0)
+        predict = model.predict(img, verbose=0)
+        predict = (predict > predict_threshold).astype(np.uint8)
+        imsave(predict_to + image, predict, check_contrast=False)

@@ -20,7 +20,7 @@ from skimage.io import imshow, imread, imsave  # show images as windows
 #   height_final: desired image height
 #   width_final: desired image width
 def slice_data(data_from, label_from, data_to, label_to, height, width, height_final, width_final):
-    # Assign image ids through the directory
+    # Create an iterable list through the directory
     imagelist = os.listdir(data_from)
 
     # Calculate # of cut-outs from the original image
