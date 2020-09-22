@@ -10,30 +10,6 @@ from skimage.transform import resize  # resize images
 # Purpose: Access directories to extract, resize, and transform datasets into numpy arrays
 # Parameters:
 #   data_path: dataset directory address (string)
-def create_ids(data_path, valid_split):
-    # Assign image ids through the directory
-    # image_ids = next(os.walk(data_path))
-    imagelist = os.listdir(data_path)
-
-    # Initialize lists to store all input image ids for testing and validation
-    train_ids = []
-    valid_ids = []
-
-    # Loop through every image using given path and unique folder identifier
-    for image in tqdm(imagelist[:int((1-valid_split)*len(imagelist))]):
-        train_ids.append(image)
-
-    # Loop through every image using given path and unique folder identifier
-    for mask in tqdm(imagelist[int((1-valid_split)*len(imagelist)):]):
-        valid_ids.append(mask)
-    print(train_ids[0])
-
-    return train_ids, valid_ids
-
-
-# Purpose: Access directories to extract, resize, and transform datasets into numpy arrays
-# Parameters:
-#   data_path: dataset directory address (string)
 #   label_path: label directory address (string)
 #   height: image height (int)
 #   width: image width (int)
@@ -94,14 +70,14 @@ def create_test_arrays(data_path, height, width, channels):
 #   batch_size: size of batch when training
 def create_generators(x_train, y_train, valid_split, batch_size):
     # Seeds for consistent runs for debugging (optional)
-    seed = 27  # Arbitrary value
+    seed = 52  # Arbitrary value
 
     # Create generators that will augment the data for each epoch
-    image_gen = tf.keras.preprocessing.image.ImageDataGenerator(rotation_range=50, zoom_range=0.2,
-                                                                width_shift_range=0.2, height_shift_range=0.2,
+    image_gen = tf.keras.preprocessing.image.ImageDataGenerator(rotation_range=80, zoom_range=0.4,
+                                                                width_shift_range=0.4, height_shift_range=0.4,
                                                                 fill_mode='reflect')
-    mask_gen = tf.keras.preprocessing.image.ImageDataGenerator(rotation_range=50, zoom_range=0.2,
-                                                               width_shift_range=0.2, height_shift_range=0.2,
+    mask_gen = tf.keras.preprocessing.image.ImageDataGenerator(rotation_range=80, zoom_range=0.4,
+                                                               width_shift_range=0.4, height_shift_range=0.4,
                                                                fill_mode='reflect')
 
     print('Created ImageDataGenerator')

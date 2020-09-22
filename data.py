@@ -76,6 +76,8 @@ def check_data(x_train, y_train):
 
     # Show sample data values from the sample image pair
     print(x_train[idx, :, :, 0])
+    print(x_train[idx, :, :, 1])
+    print(x_train[idx, :, :, 2])
     print(y_train[idx, :, :, 0])
 
 

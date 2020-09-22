@@ -6,6 +6,7 @@ import numpy as np
 import random
 
 from tqdm import tqdm  # progress bars on database extraction
+from skimage import img_as_ubyte  # Convert to ubyte for saving
 from skimage.color import gray2rgb  # Convert single
 from skimage.io import imshow, imread, imsave  # Show, read, and save images
 from skimage.feature import peak_local_max  # Use euclidian distances to find local maxes
@@ -15,8 +16,11 @@ from scipy import spatial  # KD Tree used to locate the nearest sperm in the lab
 from math import sqrt, pow  # Math functions to manually calculate the distances if there is only one label
 
 # Constant for thresholding sperm counting
-predict_threshold = 0.955
-min_distance = 3
+predict_threshold = 0.94
+min_distance = 7
+# 20x - 0.98, 5
+# 10x - 0.94, 7? Still bad
+# 5x - ?
 
 
 # Purpose: Basic mask model prediction output
@@ -33,9 +37,11 @@ def pred_show(x_test, model):
     else:
         return
 
-    # Obtain teh image, and show the prediction values
+    # Obtain the image, and show the prediction values
     x = np.array(x_test[idx])
     x = np.expand_dims(x, axis=0)
+    print(x.shape)
+    print(x[:, :, :, 0])
     predict = model.predict(x, verbose=1)
     print('Pre-conversion')
     print(np.shape(predict))
@@ -65,6 +71,7 @@ def watershed_pred(x_test, y_test, model):
     index_type = input('Choose index type (random, chosen)')
     if index_type == 'random':
         idx = random.randint(0, len(x_test))
+        print('Random index: ' + str(idx))
     elif index_type == 'chosen':
         idx = int(input('Select index: '))
     else:
@@ -132,7 +139,7 @@ def watershed_pred(x_test, y_test, model):
 # Purpose: Use watershed to predict the number of sperm with coordinates
 # Parameters:
 #   image: label to count
-def count(image, min_dist):
+def count(image, min_dist=min_distance):
     # Euclidian distance from background using distance_transform
     dist = ndimage.distance_transform_edt(image)
     local_max = peak_local_max(dist, indices=False, min_distance=min_dist, labels=image)
@@ -169,7 +176,7 @@ def count(image, min_dist):
 
 
 # Purpose: Traverse the directory to match labels with the predicted ground truths at 20x
-def metrics(data_path, label_predict, label_truth, height, width, height_final, width_final, distance_threshold):
+def metrics(data_path, label_predict, label_truth, resized_height, resized_width, height, width, distance_threshold):
     # Determine scale of metric to calculate
     scale = input('Metric scale: (single, full)')
 
@@ -179,40 +186,65 @@ def metrics(data_path, label_predict, label_truth, height, width, height_final, 
     fn = 0
 
     # Calculate # of cut-outs from the original image
-    height_ratio = height // height_final
-    width_ratio = width // width_final
+    height_ratio = int(1024 // resized_height)
+    width_ratio = int(1024 // resized_width)
 
     # Get list of predicted images in a directory
     predict_list = os.listdir(label_predict)
+    print(len(predict_list))
 
     # Loop through every image using given path and unique folder identifier
-    for image in tqdm(predict_list):
+    for idx in tqdm(range(len(predict_list))):
+        if scale == 'single':
+            idx = random.randint(0, len(predict_list))
+            print('Index: ' + str(idx))
+        image = predict_list[idx]
         path = label_predict + image
         img = imread(path)
         
         ground_truth = list()
+        predict_num = int(image[-7])
+        if height_ratio == 2:
+            if predict_num == 0:
+                series = [0, 1, 4, 5]
+            elif predict_num == 1:
+                series = [2, 3, 6, 7]
+            elif predict_num == 2:
+                series = [8, 9, 12, 13]
+            elif predict_num == 3:
+                series = [10, 11, 14, 15]
+            else:
+                print('Out of range')
+        else:
+            series = range(16)
+
         # Traversal by row left to right
         for i in range(height_ratio):
             for j in range(width_ratio):
-                img_path = label_truth + image[:-9] + str(i * height_ratio + j) + image[-8:]
+                img_path = label_truth + image[:-7] + str(series[i * height_ratio + j]) + image[-6:]
                 truth = imread(img_path)
                 ground_truth.append(truth)
 
         if scale == 'single':
-            pic = image[:-8] + 'BF.png'
-            path = data_path + pic
+            # Get a picture and convert it to 3 channels to draw on
+            path = data_path + image
             pic = imread(path)
             pic = gray2rgb(pic)
-            precision, recall, f1, drawn = count_metric(height_ratio, width_ratio, height_final, width_final, img,
-                                                        ground_truth, distance_threshold, scale, pic)
+
+            # Pass to count_metric to calculate the metrics for this one image
+            precision, recall, f1, drawn = count_metric(height_ratio, width_ratio, height, width, img, ground_truth,
+                                                        distance_threshold, scale, pic)
             print('Precision: ' + str(precision))
             print('Recall: ' + str(recall))
             print('F1-score: ' + str(f1))
+
+            # Show the image drawn on
             imshow(drawn)
             plt.show()
             return
         else:
-            tp_, fp_, fn_ = count_metric(height_ratio, width_ratio, height_final, width_final, img, ground_truth,
+            # If full dataset, accumulate true positives, false positives, and false negatives for the final calculation
+            tp_, fp_, fn_ = count_metric(height_ratio, width_ratio, height, width, img, ground_truth,
                                          distance_threshold, scale)
             tp += tp_
             fp += fp_
@@ -324,9 +356,20 @@ def predict_set(model, data_from, predict_to):
 
     # Loop through every image using given path and unique folder identifier
     for image in tqdm(imagelist):
+        # Get image from the name
         path = data_from + image
         img = imread(path)
-        img = np.expand_dims(img, axis=0)
-        predict = model.predict(img, verbose=0)
-        predict = (predict > predict_threshold).astype(np.uint8)
-        imsave(predict_to + image, predict, check_contrast=False)
+
+        # Convert into three channels and expand dims to input to model
+        img_rgb = gray2rgb(img)
+        img_in = np.expand_dims(img_rgb, axis=0)
+
+        # Convert model prediction to a binary label using a threshold after predicting
+        predict = model.predict(img_in, verbose=0)
+        predict_thresh = img_as_ubyte((predict > predict_threshold).astype(np.bool))
+
+        # Reformat the label to the correct dimensions
+        predict_img = np.squeeze(predict_thresh)
+
+        # Save the predicted label
+        imsave(predict_to + image, predict_img, check_contrast=False)

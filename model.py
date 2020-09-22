@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
 import tensorflow.python.keras.backend as k
+import matplotlib.pyplot as plt
 
 
 from tensorflow.keras.layers import Input, Lambda, Conv2D, Dropout, MaxPooling2D, Conv2DTranspose, concatenate  # Model
@@ -12,7 +13,7 @@ from tensorflow.keras import Model  # Compile and show summary of model
 #   y_true: ground truth label
 #   y_pred: predicted label
 #   weight: pre-calculated ratio of background to sperm labelled pixels
-def weighted_binary_crossentropy(y_true, y_pred, weight=151.28400868921892):
+def weighted_binary_crossentropy(y_true, y_pred, weight=88.2057235707847):
     y_true = k.clip(y_true, k.epsilon(), 1-k.epsilon())
     y_pred = k.clip(y_pred, k.epsilon(), 1-k.epsilon())
     logloss = -(y_true * k.log(y_pred) * weight + (1 - y_true) * k.log(1 - y_pred))
@@ -120,4 +121,5 @@ def create_unet(width, height, channels):
 def evaluate_model(model, val_generator, batch_size):
     # Evaluate using model.evaluate using the entire generator set
     results = model.evaluate(val_generator, batch_size=batch_size)
+
     return results

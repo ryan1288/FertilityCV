@@ -10,13 +10,13 @@ from tensorflow.keras.models import load_model  # Load saved model
 from tensorflow.keras.callbacks import EarlyStopping, TensorBoard, ModelCheckpoint  # Callbacks to save/evaluate
 
 # User-defined functions
-from datagen import create_train_arrays, create_generators  # data importer functions
-from model import create_unet, calculate_weight, weighted_binary_crossentropy, dice_coef, evaluate_model  # U-Net CNN
+from datagen import create_train_arrays, create_generators  # Data importer functions
+from model import create_unet, calculate_weight, weighted_binary_crossentropy, dice_coef, evaluate_model, feature_map
 from tools import pred_show, watershed_pred, metrics, predict_set  # Test model prediction
 from data import slice_data, check_data, blank_filter  # Data manipulation tools
 
 # Constants
-MAGNIFICATION = 10
+MAGNIFICATION = 5
 RAW_IMG_HEIGHT = 1040
 RAW_IMG_WIDTH = 1392
 RESIZE_IMG_HEIGHT = MAGNIFICATION / 20 * 1024
@@ -25,9 +25,9 @@ IMG_HEIGHT = 256
 IMG_WIDTH = 256
 IMG_CHANNELS = 3
 BATCH_SIZE = 4
-EPOCHS = 20
+EPOCHS = 10
 VALID_SPLIT = 0.1
-METRIC_DISTANCE = 5
+METRIC_DISTANCE = 4
 
 # Dataset paths
 DATA_RAW_PATH = 'Data_Full/'
@@ -113,8 +113,8 @@ if __name__ == '__main__':
             print('CNN Model created')
 
             # Using Image Generators with a 10% validation split
-            results = model.fit(train_generator, validation_data=val_generator, steps_per_epoch=2000, epochs=EPOCHS,
-                                validation_steps=200, callbacks=callbacks, verbose=1)
+            results = model.fit(train_generator, validation_data=val_generator, steps_per_epoch=500, epochs=EPOCHS,
+                                validation_steps=50, callbacks=callbacks, verbose=1)
             print('Model trained')
 
             # Save model
@@ -136,8 +136,8 @@ if __name__ == '__main__':
 
         elif state == 'metrics':
             # Calculates precision/recall based on a single image or the full dataset
-            metrics(DATA_PATH, LABEL_PATH, 'Label/', RESIZE_IMG_HEIGHT, RESIZE_IMG_WIDTH, IMG_HEIGHT, IMG_WIDTH,
-                    METRIC_DISTANCE)
+            metrics(SIZED_DATA_PATH, PREDICT_PATH, 'Predict_20x/', RESIZE_IMG_HEIGHT, RESIZE_IMG_WIDTH, IMG_HEIGHT,
+                    IMG_WIDTH, METRIC_DISTANCE)
 
         elif state == 'test':
             # Select test and data type
