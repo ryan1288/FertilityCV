@@ -11,12 +11,12 @@ from tensorflow.keras.callbacks import EarlyStopping, TensorBoard, ModelCheckpoi
 
 # User-defined functions
 from datagen import create_train_arrays, create_generators  # Data importer functions
-from model import create_unet, calculate_weight, weighted_binary_crossentropy, dice_coef, evaluate_model, feature_map
-from tools import pred_show, watershed_pred, metrics, predict_set  # Test model prediction
+from model import create_unet, calculate_weight, weighted_binary_crossentropy, dice_coef, evaluate_model # U-Net Model
+from tools import pred_show, watershed_pred, metrics, metrics_optimize, predict_set  # Test model prediction
 from data import slice_data, check_data, blank_filter  # Data manipulation tools
 
 # Constants
-MAGNIFICATION = 5
+MAGNIFICATION = 10
 RAW_IMG_HEIGHT = 1040
 RAW_IMG_WIDTH = 1392
 RESIZE_IMG_HEIGHT = MAGNIFICATION / 20 * 1024
@@ -25,7 +25,7 @@ IMG_HEIGHT = 256
 IMG_WIDTH = 256
 IMG_CHANNELS = 3
 BATCH_SIZE = 4
-EPOCHS = 10
+EPOCHS = 6
 VALID_SPLIT = 0.1
 METRIC_DISTANCE = 4
 
@@ -48,7 +48,7 @@ checkpoint_dir = os.path.dirname(checkpoint_path)
 # Create checkpoints/callbacks to stop and save before overfitting
 callbacks = [
     EarlyStopping(patience=2, monitor='val_loss'),
-    TensorBoard(log_dir='./logs'),
+    TensorBoard(log_dir='./logs/' + SAVE_POSTFIX),
     ModelCheckpoint(checkpoint_path, save_weights_only=True, verbose=1)
 ]
 
@@ -68,8 +68,8 @@ if __name__ == '__main__':
     # Prompt until program is terminated
     while state != 'exit':
         # Select starting state
-        state = input('Select mode: (slice, filter, data, load_data, weight, generator, train, load_model, evaluate, '
-                      'metrics, test, check, predict, exit)')
+        state = input('Select mode: (slice, filter, data, load_data, weight, train, load_model, evaluate, predict,  '
+                      'metrics, metrics_optimize, test, check, predict, exit)')
 
         if state == 'slice':
             # Cuts up image into desired final dimensions
@@ -102,19 +102,19 @@ if __name__ == '__main__':
             # Calculate the weight ratio of background/sperm for training
             calculate_weight(y_train)
 
-        elif state == 'generator':
-            # Use create_generators to make the generators for the model training
-            train_generator, val_generator = create_generators(x_train, y_train, VALID_SPLIT, BATCH_SIZE)
-            print('Generators created')
-
         elif state == 'train':
+            # Use create_generators to make the generators for the model training
+            if not train_generator and not val_generator:
+                train_generator, val_generator = create_generators(x_train, y_train, VALID_SPLIT, BATCH_SIZE)
+                print('Generators created')
+
             # Create the UNet Architecture model
             model = create_unet(IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
             print('CNN Model created')
 
             # Using Image Generators with a 10% validation split
-            results = model.fit(train_generator, validation_data=val_generator, steps_per_epoch=500, epochs=EPOCHS,
-                                validation_steps=50, callbacks=callbacks, verbose=1)
+            results = model.fit(train_generator, validation_data=val_generator, steps_per_epoch=2000, epochs=EPOCHS,
+                                validation_steps=200, callbacks=callbacks, verbose=1)
             print('Model trained')
 
             # Save model
@@ -129,15 +129,35 @@ if __name__ == '__main__':
             print('Model loaded')
 
         elif state == 'evaluate':
+            # Use create_generators to make the generators for the model training
+            if not train_generator and not val_generator:
+                train_generator, val_generator = create_generators(x_train, y_train, VALID_SPLIT, BATCH_SIZE)
+                print('Generators created')
+
             # Evaluate model using validation data generator
             results = evaluate_model(model, val_generator, BATCH_SIZE)
             print('Completed Evaluation')
             print(results)
 
+        elif state == 'predict':
+            # Predicts and outputs a set of labels into a directory
+            predict_set(model, SIZED_DATA_PATH, PREDICT_PATH)
+
         elif state == 'metrics':
-            # Calculates precision/recall based on a single image or the full dataset
-            metrics(SIZED_DATA_PATH, PREDICT_PATH, 'Predict_20x/', RESIZE_IMG_HEIGHT, RESIZE_IMG_WIDTH, IMG_HEIGHT,
-                    IMG_WIDTH, METRIC_DISTANCE)
+            # Determine scale of metric to calculate
+            scale = input('Metric scale: (single, full)')
+            if scale == 'single' or scale == 'full':
+                # Calculates precision/recall based on a single image or the full dataset
+                precision, recall, f1 = metrics(SIZED_DATA_PATH, PREDICT_PATH, 'Predict_20x/', RESIZE_IMG_HEIGHT,
+                                                RESIZE_IMG_WIDTH, IMG_HEIGHT, IMG_WIDTH, METRIC_DISTANCE, scale)
+                print('Precision: ' + str(precision))
+                print('Recall: ' + str(recall))
+                print('F1-score: ' + str(f1))
+
+        elif state == 'metrics_optimize':
+            # Outputs a range of thresholds and minimum distances
+            metrics_optimize(model, SIZED_DATA_PATH, PREDICT_PATH, RESIZE_IMG_HEIGHT, RESIZE_IMG_WIDTH, IMG_HEIGHT,
+                             IMG_WIDTH)
 
         elif state == 'test':
             # Select test and data type
@@ -154,6 +174,3 @@ if __name__ == '__main__':
         elif state == 'check':
             # Check input data to visualize as images and values
             check_data(x_train, y_train)
-
-        elif state == 'predict':
-            predict_set(model, SIZED_DATA_PATH, PREDICT_PATH)

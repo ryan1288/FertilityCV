@@ -1,7 +1,6 @@
 import tensorflow as tf
 import numpy as np
 import tensorflow.python.keras.backend as k
-import matplotlib.pyplot as plt
 
 
 from tensorflow.keras.layers import Input, Lambda, Conv2D, Dropout, MaxPooling2D, Conv2DTranspose, concatenate  # Model
@@ -13,7 +12,7 @@ from tensorflow.keras import Model  # Compile and show summary of model
 #   y_true: ground truth label
 #   y_pred: predicted label
 #   weight: pre-calculated ratio of background to sperm labelled pixels
-def weighted_binary_crossentropy(y_true, y_pred, weight=88.2057235707847):
+def weighted_binary_crossentropy(y_true, y_pred, weight=151.28400868921892 * 1.5):
     y_true = k.clip(y_true, k.epsilon(), 1-k.epsilon())
     y_pred = k.clip(y_pred, k.epsilon(), 1-k.epsilon())
     logloss = -(y_true * k.log(y_pred) * weight + (1 - y_true) * k.log(1 - y_pred))
@@ -48,7 +47,7 @@ def calculate_weight(y_train):
 #   height: image height (int)
 #   width: image width (int)
 def create_unet(width, height, channels):
-    # Encoder: Input with normalization into [0,1] for a color (3-channel) image with specified width and height
+    # Encoder: Input with normalization into [-1,1] for a color (3-channel) image with specified width and height
     inputs = Input((width, height, channels))
     norm = Lambda(lambda x: x / 127.5 - 1)(inputs)
 

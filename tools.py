@@ -16,8 +16,8 @@ from scipy import spatial  # KD Tree used to locate the nearest sperm in the lab
 from math import sqrt, pow  # Math functions to manually calculate the distances if there is only one label
 
 # Constant for thresholding sperm counting
-predict_threshold = 0.94
-min_distance = 7
+predict_threshold = 0.95
+min_distance = 3
 # 20x - 0.98, 5
 # 10x - 0.94, 7? Still bad
 # 5x - ?
@@ -176,10 +176,8 @@ def count(image, min_dist=min_distance):
 
 
 # Purpose: Traverse the directory to match labels with the predicted ground truths at 20x
-def metrics(data_path, label_predict, label_truth, resized_height, resized_width, height, width, distance_threshold):
-    # Determine scale of metric to calculate
-    scale = input('Metric scale: (single, full)')
-
+def metrics(data_path, label_predict, label_truth, resized_height, resized_width, height, width, distance_threshold,
+            scale):
     # Declare true and false positives
     tp = 0
     fp = 0
@@ -191,7 +189,6 @@ def metrics(data_path, label_predict, label_truth, resized_height, resized_width
 
     # Get list of predicted images in a directory
     predict_list = os.listdir(label_predict)
-    print(len(predict_list))
 
     # Loop through every image using given path and unique folder identifier
     for idx in tqdm(range(len(predict_list))):
@@ -234,14 +231,11 @@ def metrics(data_path, label_predict, label_truth, resized_height, resized_width
             # Pass to count_metric to calculate the metrics for this one image
             precision, recall, f1, drawn = count_metric(height_ratio, width_ratio, height, width, img, ground_truth,
                                                         distance_threshold, scale, pic)
-            print('Precision: ' + str(precision))
-            print('Recall: ' + str(recall))
-            print('F1-score: ' + str(f1))
 
-            # Show the image drawn on
+            # Show the image with circles drawn for tp, fp, fn
             imshow(drawn)
             plt.show()
-            return
+            return precision, recall, f1
         else:
             # If full dataset, accumulate true positives, false positives, and false negatives for the final calculation
             tp_, fp_, fn_ = count_metric(height_ratio, width_ratio, height, width, img, ground_truth,
@@ -255,9 +249,7 @@ def metrics(data_path, label_predict, label_truth, resized_height, resized_width
     recall = tp / (tp + fn)
     f1 = 2 * (precision * recall) / (precision + recall)
 
-    print('Precision: ' + str(precision))
-    print('Recall: ' + str(recall))
-    print('F1-score: ' + str(f1))
+    return precision, recall, f1
 
 
 # Purpose: Use the numpy arrays of the predicted label and ground truth to calculate precision, recall, and F1-score
@@ -350,7 +342,7 @@ def count_metric(height_ratio, width_ratio, height, width, label, ground_truth, 
 #   model: trained model used to predict images
 #   data_from: data path to obtain images and names from
 #   predict_to: data path to store predicted labels
-def predict_set(model, data_from, predict_to):
+def predict_set(model, data_from, predict_to, threshold=predict_threshold):
     # Create an iterable list through the directory
     imagelist = os.listdir(data_from)
 
@@ -366,10 +358,40 @@ def predict_set(model, data_from, predict_to):
 
         # Convert model prediction to a binary label using a threshold after predicting
         predict = model.predict(img_in, verbose=0)
-        predict_thresh = img_as_ubyte((predict > predict_threshold).astype(np.bool))
+        predict_thresh = img_as_ubyte((predict > threshold).astype(np.bool))
 
         # Reformat the label to the correct dimensions
         predict_img = np.squeeze(predict_thresh)
 
         # Save the predicted label
         imsave(predict_to + image, predict_img, check_contrast=False)
+
+
+def metrics_optimize(model, data_from, predict_path, resized_height, resized_width, height, width):
+    # Lists of metric outputs
+    precisions = list()
+    recalls = list()
+    f1s = list()
+
+    # Input range of parameters to be tested
+    predict_thresh_str = input('Input list of prediction thresholds (separated by a space): ')
+    min_dist_str = input('Input list of minimum distances (separated by a space): ')
+    predict_thresh_list = predict_thresh_str.split()
+    min_dist_list = min_dist_str.split()
+
+    for predict_thresh in predict_thresh_list:
+        for min_dist in min_dist_list:
+            print('Prediction threshold:' + str(predict_thresh) + ' / Minimum distance: ' + str(min_dist))
+            predict_set(model, data_from, predict_path, float(predict_thresh))
+            precision, recall, f1 = metrics(data_from, predict_path, 'Predict_20x/', resized_height, resized_width,
+                                            height, width, int(min_dist), 'full')
+            precisions.append(precision)
+            recalls.append(recall)
+            f1s.append(f1)
+            print('Precision: ' + str(precision) + ' / Recall: ' + str(recall) + ' / F1-score: ' + str(f1))
+
+    for predict_thresh in predict_thresh_list:
+        for min_dist in min_dist_list:
+            print('Prediction threshold:' + str(predict_thresh) + ' / Minimum distance: ' + str(min_dist))
+            print('Precision: ' + str(precisions.pop(0)) + ' / Recall: ' + str(recalls.pop(0)) + ' / F1-score: '
+                  + str(f1s.pop(0)))

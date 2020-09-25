@@ -70,9 +70,20 @@ def create_test_arrays(data_path, height, width, channels):
 #   batch_size: size of batch when training
 def create_generators(x_train, y_train, valid_split, batch_size):
     # Seeds for consistent runs for debugging (optional)
-    seed = 52  # Arbitrary value
+    seed = 47  # Arbitrary value
 
     # Create generators that will augment the data for each epoch
+    """
+    image_gen = tf.keras.preprocessing.image.ImageDataGenerator(rotation_range=80, zoom_range=0.4,
+                                                                width_shift_range=0.4, height_shift_range=0.4,
+                                                                brightness_range=(0.7, 1.3), fill_mode='reflect',
+                                                                horizontal_flip=True, vertical_flip=True)
+    mask_gen = tf.keras.preprocessing.image.ImageDataGenerator(rotation_range=80, zoom_range=0.4,
+                                                               width_shift_range=0.4, height_shift_range=0.4,
+                                                               brightness_range=(0.7, 1.3), fill_mode='reflect',
+                                                               horizontal_flip=True, vertical_flip=True)
+                                                               """
+    # Previous settings
     image_gen = tf.keras.preprocessing.image.ImageDataGenerator(rotation_range=80, zoom_range=0.4,
                                                                 width_shift_range=0.4, height_shift_range=0.4,
                                                                 fill_mode='reflect')
