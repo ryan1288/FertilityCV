@@ -380,9 +380,9 @@ def metrics_optimize(model, data_from, predict_path, resized_height, resized_wid
     min_dist_list = min_dist_str.split()
 
     for predict_thresh in predict_thresh_list:
+        predict_set(model, data_from, predict_path, float(predict_thresh))
         for min_dist in min_dist_list:
             print('Prediction threshold:' + str(predict_thresh) + ' / Minimum distance: ' + str(min_dist))
-            predict_set(model, data_from, predict_path, float(predict_thresh))
             precision, recall, f1 = metrics(data_from, predict_path, 'Predict_20x/', resized_height, resized_width,
                                             height, width, int(min_dist), 'full')
             precisions.append(precision)
