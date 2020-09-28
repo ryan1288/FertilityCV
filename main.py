@@ -68,7 +68,7 @@ if __name__ == '__main__':
     # Prompt until program is terminated
     while state != 'exit':
         # Select starting state
-        state = input('Select mode: (slice, filter, data, load_data, weight, train, load_model, evaluate, predict,  '
+        state = input('Select mode: (slice, filter, data, load_data, weight, train, load_model, evaluate, predict, '
                       'metrics, metrics_optimize, test, check, predict, exit)')
 
         if state == 'slice':
