@@ -48,7 +48,7 @@ checkpoint_dir = os.path.dirname(checkpoint_path)
 
 # Create checkpoints/callbacks to stop and save before overfitting
 callbacks = [
-    EarlyStopping(patience=2, monitor='val_loss'),
+    EarlyStopping(patience=0, monitor='val_loss'),
     TensorBoard(log_dir='./logs/' + MODEL_POSTFIX),
     ModelCheckpoint(checkpoint_path, monitor='val_loss', save_best_only=True, verbose=1)
 ]
