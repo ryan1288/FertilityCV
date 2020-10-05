@@ -11,7 +11,7 @@ from tensorflow.keras.callbacks import EarlyStopping, TensorBoard, ModelCheckpoi
 
 # User-defined functions
 from datagen import create_train_arrays, create_generators  # Data importer functions
-from model import create_unet, calculate_weight, weighted_binary_crossentropy, dice_coef, evaluate_model # U-Net Model
+from model import create_unet, calculate_weight, weighted_binary_crossentropy, dice_coef, evaluate_model  # U-Net Model
 from tools import pred_show, watershed_pred, metrics, metrics_optimize, predict_set  # Test model prediction
 from data import slice_data, check_data, blank_filter  # Data manipulation tools
 
@@ -24,8 +24,8 @@ RESIZE_IMG_WIDTH = MAGNIFICATION / 20 * 1024
 IMG_HEIGHT = 256
 IMG_WIDTH = 256
 IMG_CHANNELS = 3
-BATCH_SIZE = 4
-EPOCHS = 6
+BATCH_SIZE = 2
+EPOCHS = 10
 VALID_SPLIT = 0.1
 METRIC_DISTANCE = 4
 
@@ -40,6 +40,7 @@ PREDICT_PATH = 'Predict_' + str(MAGNIFICATION) + 'x/'
 DATA_SAVE = 'numpy_data/'
 MODEL_SAVE = 'saved_models/model'
 SAVE_POSTFIX = '_' + str(MAGNIFICATION) + 'x'
+MODEL_POSTFIX = SAVE_POSTFIX + '_high_drop'
 
 # Checkpoints to keep the best weights
 checkpoint_path = "checkpoints/test.ckpt"
@@ -48,8 +49,8 @@ checkpoint_dir = os.path.dirname(checkpoint_path)
 # Create checkpoints/callbacks to stop and save before overfitting
 callbacks = [
     EarlyStopping(patience=2, monitor='val_loss'),
-    TensorBoard(log_dir='./logs/' + SAVE_POSTFIX),
-    ModelCheckpoint(checkpoint_path, save_weights_only=True, verbose=1)
+    TensorBoard(log_dir='./logs/' + MODEL_POSTFIX),
+    ModelCheckpoint(checkpoint_path, monitor='val_loss', save_best_only=True, verbose=1)
 ]
 
 # Initialize dataset variables
@@ -113,17 +114,17 @@ if __name__ == '__main__':
             print('CNN Model created')
 
             # Using Image Generators with a 10% validation split
-            results = model.fit(train_generator, validation_data=val_generator, steps_per_epoch=2000, epochs=EPOCHS,
-                                validation_steps=200, callbacks=callbacks, verbose=1)
+            results = model.fit(train_generator, validation_data=val_generator, steps_per_epoch=4000, epochs=EPOCHS,
+                                validation_steps=400, callbacks=callbacks, verbose=1)
             print('Model trained')
 
             # Save model
-            model.save(MODEL_SAVE + SAVE_POSTFIX + '.h5')
+            model.save(MODEL_SAVE + MODEL_POSTFIX + '.h5')
             print('Model saved')
 
         elif state == 'load_model':
             # Load model
-            model = load_model(MODEL_SAVE + SAVE_POSTFIX + '.h5',
+            model = load_model(MODEL_SAVE + MODEL_POSTFIX + '.h5',
                                custom_objects={'weighted_binary_crossentropy': weighted_binary_crossentropy,
                                                'dice_coef': dice_coef})
             print('Model loaded')

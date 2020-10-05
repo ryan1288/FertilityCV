@@ -16,11 +16,8 @@ from scipy import spatial  # KD Tree used to locate the nearest sperm in the lab
 from math import sqrt, pow  # Math functions to manually calculate the distances if there is only one label
 
 # Constant for thresholding sperm counting
-predict_threshold = 0.98
+predict_threshold = 0.94
 min_distance = 4
-# 20x - 0.98, 5
-# 10x - 0.94, 7? Still bad
-# 5x - ?
 
 
 # Purpose: Basic mask model prediction output

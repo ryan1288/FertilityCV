@@ -74,16 +74,17 @@ def create_generators(x_train, y_train, valid_split, batch_size):
 
     # Create generators that will augment the data for each epoch
     """
-    image_gen = tf.keras.preprocessing.image.ImageDataGenerator(rotation_range=80, zoom_range=0.4,
+    image_gen = tf.keras.preprocessing.image.ImageDataGenerator(rotation_range=45, zoom_range=0.2,
                                                                 width_shift_range=0.4, height_shift_range=0.4,
-                                                                brightness_range=(0.7, 1.3), fill_mode='reflect',
+                                                                brightness_range=(0.8, 1.2), fill_mode='reflect',
                                                                 horizontal_flip=True, vertical_flip=True)
-    mask_gen = tf.keras.preprocessing.image.ImageDataGenerator(rotation_range=80, zoom_range=0.4,
+    mask_gen = tf.keras.preprocessing.image.ImageDataGenerator(rotation_range=45, zoom_range=0.2,
                                                                width_shift_range=0.4, height_shift_range=0.4,
-                                                               brightness_range=(0.7, 1.3), fill_mode='reflect',
+                                                               brightness_range=(0.8, 1.2), fill_mode='reflect',
                                                                horizontal_flip=True, vertical_flip=True)
-                                                               """
+    """
     # Previous settings
+
     image_gen = tf.keras.preprocessing.image.ImageDataGenerator(rotation_range=80, zoom_range=0.4,
                                                                 width_shift_range=0.4, height_shift_range=0.4,
                                                                 fill_mode='reflect')
