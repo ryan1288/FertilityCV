@@ -69,8 +69,8 @@ if __name__ == '__main__':
     # Prompt until program is terminated
     while state != 'exit':
         # Select starting state
-        state = input('Select mode: (slice, filter, data, load_data, weight, train, load_model, evaluate, predict, '
-                      'metrics, metrics_optimize, test, check, predict, exit)')
+        state = input('Select mode: (slice, filter, data, load_data, weight, train, load_model, checkpoint, evaluate, '
+                      'predict, metrics, metrics_optimize, test, check, predict, exit)')
 
         if state == 'slice':
             # Cuts up image into desired final dimensions
@@ -114,8 +114,8 @@ if __name__ == '__main__':
             print('CNN Model created')
 
             # Using Image Generators with a 10% validation split
-            results = model.fit(train_generator, validation_data=val_generator, steps_per_epoch=4000, epochs=EPOCHS,
-                                validation_steps=400, callbacks=callbacks, verbose=1)
+            results = model.fit(train_generator, validation_data=val_generator, steps_per_epoch=8000, epochs=EPOCHS,
+                                validation_steps=800, callbacks=callbacks, verbose=1)
             print('Model trained')
 
             # Save model
@@ -128,6 +128,19 @@ if __name__ == '__main__':
                                custom_objects={'weighted_binary_crossentropy': weighted_binary_crossentropy,
                                                'dice_coef': dice_coef})
             print('Model loaded')
+
+        elif state == 'checkpoint':
+            # Load model
+            model = load_model('checkpoints/test.ckpt',
+                               custom_objects={'weighted_binary_crossentropy': weighted_binary_crossentropy,
+                                               'dice_coef': dice_coef})
+            print('Checkpoint model loaded')
+            # Determine scale of metric to calculate
+            overwrite = input('Overwrite? (y/n)')
+            if overwrite == 'y':
+                # Overwrite model using better checkpoint
+                model.save(MODEL_SAVE + MODEL_POSTFIX + '.h5')
+                print('Model overwritten')
 
         elif state == 'evaluate':
             # Use create_generators to make the generators for the model training

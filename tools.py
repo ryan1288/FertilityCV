@@ -15,9 +15,10 @@ from scipy import ndimage  # Part of watershed calculation to find markers
 from scipy import spatial  # KD Tree used to locate the nearest sperm in the label
 from math import sqrt, pow  # Math functions to manually calculate the distances if there is only one label
 
-# Constant for thresholding sperm counting
-predict_threshold = 0.94
-min_distance = 4
+# Constant values for testing
+predict_threshold = 0.94  # Thresholding sperm counting
+min_distance = 6  # Minimum distance between local maxima
+radius_threshold = 3  # Minimum radius of label to be considered a sperm
 
 
 # Purpose: Basic mask model prediction output
@@ -96,7 +97,11 @@ def watershed_pred(x_test, y_test, model):
     # Connected component analysis before using watershed algorithm
     markers = ndimage.label(local_max, structure=np.ones((3, 3)))[0]
     labels = watershed(-dist, markers, mask=image)
-    print("[COUNT] {} unique instances found".format(len(np.unique(labels)) - 1))
+    # Old labels that included every blob
+    # print("[COUNT] {} unique instances found".format(len(np.unique(labels)) - 1))
+
+    # Count of sperm
+    count = 0
 
     # Loop through unique labels
     for label in np.unique(labels):
@@ -115,9 +120,13 @@ def watershed_pred(x_test, y_test, model):
 
         # Draw a circle and text enclosing the detected region
         ((x, y), r) = cv2.minEnclosingCircle(c)
-        cv2.circle(x_img_cpy, (int(x), int(y)), int(r), (0, 255, 0), 1)
-        cv2.putText(x_img_cpy, "{}".format(label), (int(x) - 10, int(y) - 2), cv2.FONT_HERSHEY_SIMPLEX, 0.3,
-                    (0, 0, 255), 1)
+        if r > radius_threshold:
+            cv2.circle(x_img_cpy, (int(x), int(y)), int(r), (0, 255, 0), 1)
+            cv2.putText(x_img_cpy, "{}".format(label), (int(x) - 10, int(y) - 2), cv2.FONT_HERSHEY_SIMPLEX, 0.3,
+                        (0, 0, 255), 1)
+            count += 1
+
+    print("[COUNT] {} unique instances found".format(count))
 
     # Plot images for pipeline progression
     plt.figure(1)  # Original Image
@@ -136,7 +145,7 @@ def watershed_pred(x_test, y_test, model):
 # Purpose: Use watershed to predict the number of sperm with coordinates
 # Parameters:
 #   image: label to count
-def count(image, min_dist=min_distance):
+def count(image, min_dist=min_distance, rad_threshold=radius_threshold):
     # Euclidian distance from background using distance_transform
     dist = ndimage.distance_transform_edt(image)
     local_max = peak_local_max(dist, indices=False, min_distance=min_dist, labels=image)
@@ -165,16 +174,17 @@ def count(image, min_dist=min_distance):
         contours = imutils.grab_contours(contours)
         c = max(contours, key=cv2.contourArea)
 
-        # Draw a circle and text enclosing the detected region
+        # Add the circle's label to the list
         ((x, y), r) = cv2.minEnclosingCircle(c)
-        label_xy.append((x, y))
+        if r > rad_threshold:
+            label_xy.append((x, y))
 
     return sperm_count, label_xy
 
 
 # Purpose: Traverse the directory to match labels with the predicted ground truths at 20x
 def metrics(data_path, label_predict, label_truth, resized_height, resized_width, height, width, distance_threshold,
-            scale):
+            scale, rad_threshold=radius_threshold):
     # Declare true and false positives
     tp = 0
     fp = 0
@@ -227,7 +237,7 @@ def metrics(data_path, label_predict, label_truth, resized_height, resized_width
 
             # Pass to count_metric to calculate the metrics for this one image
             precision, recall, f1, drawn = count_metric(height_ratio, width_ratio, height, width, img, ground_truth,
-                                                        distance_threshold, scale, pic)
+                                                        distance_threshold, scale, rad_threshold, pic)
 
             # Show the image with circles drawn for tp, fp, fn
             imshow(drawn)
@@ -236,7 +246,7 @@ def metrics(data_path, label_predict, label_truth, resized_height, resized_width
         else:
             # If full dataset, accumulate true positives, false positives, and false negatives for the final calculation
             tp_, fp_, fn_ = count_metric(height_ratio, width_ratio, height, width, img, ground_truth,
-                                         distance_threshold, scale)
+                                         distance_threshold, scale, rad_threshold)
             tp += tp_
             fp += fp_
             fn += fn_
@@ -258,9 +268,10 @@ def metrics(data_path, label_predict, label_truth, resized_height, resized_width
 #   label: input predicted label
 #   ground_truth: 3D array of the ground truth based on 20x magnification
 #   distance_threshold: Distance for a sperm to be considered a true positive (must be within a sperm's radius)
-def count_metric(height_ratio, width_ratio, height, width, label, ground_truth, distance_threshold, scale, pic=None):
+def count_metric(height_ratio, width_ratio, height, width, label, ground_truth, distance_threshold, scale,
+                 rad_threshold=radius_threshold, pic=None):
     # Get the predicted coordinates from count() and create a truth_xy to append scaled coordinates to
-    label_xy = count(label, distance_threshold)[1]
+    label_xy = count(label, distance_threshold, rad_threshold)[1]
     truth_xy = list()
 
     # Declare true and false positives
@@ -271,7 +282,7 @@ def count_metric(height_ratio, width_ratio, height, width, label, ground_truth, 
     for i in range(height_ratio):
         for j in range(width_ratio):
             idx = i * width_ratio + j
-            coord_xy = count(ground_truth[idx], 3)[1]
+            coord_xy = count(ground_truth[idx], 8, 4)[1]
             for coord in coord_xy:
                 coord_x = coord[0] / width_ratio + j * (width / width_ratio)
                 coord_y = coord[1] / height_ratio + i * (height / height_ratio)
@@ -372,23 +383,23 @@ def metrics_optimize(model, data_from, predict_path, resized_height, resized_wid
 
     # Input range of parameters to be tested
     predict_thresh_str = input('Input list of prediction thresholds (separated by a space): ')
-    min_dist_str = input('Input list of minimum distances (separated by a space): ')
+    min_rad_str = input('Input list of minimum radii (separated by a space): ')
     predict_thresh_list = predict_thresh_str.split()
-    min_dist_list = min_dist_str.split()
+    min_rad_list = min_rad_str.split()
 
     for predict_thresh in predict_thresh_list:
         predict_set(model, data_from, predict_path, float(predict_thresh))
-        for min_dist in min_dist_list:
-            print('Prediction threshold:' + str(predict_thresh) + ' / Minimum distance: ' + str(min_dist))
+        for min_rad in min_rad_list:
+            print('Prediction threshold:' + str(predict_thresh) + ' / Minimum radius: ' + str(min_rad))
             precision, recall, f1 = metrics(data_from, predict_path, 'Predict_20x/', resized_height, resized_width,
-                                            height, width, int(min_dist), 'full')
+                                            height, width, min_distance, 'full', min_rad)
             precisions.append(precision)
             recalls.append(recall)
             f1s.append(f1)
             print('Precision: ' + str(precision) + ' / Recall: ' + str(recall) + ' / F1-score: ' + str(f1))
 
     for predict_thresh in predict_thresh_list:
-        for min_dist in min_dist_list:
-            print('Prediction threshold:' + str(predict_thresh) + ' / Minimum distance: ' + str(min_dist))
+        for min_rad in min_rad_list:
+            print('Prediction threshold:' + str(predict_thresh) + ' / Minimum radius: ' + str(min_rad))
             print('Precision: ' + str(precisions.pop(0)) + ' / Recall: ' + str(recalls.pop(0)) + ' / F1-score: '
                   + str(f1s.pop(0)))
