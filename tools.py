@@ -17,8 +17,13 @@ from math import sqrt, pow  # Math functions to manually calculate the distances
 
 # Constant values for testing
 predict_threshold = 0.94  # Thresholding sperm counting
-min_distance = 6  # Minimum distance between local maxima
-radius_threshold = 3  # Minimum radius of label to be considered a sperm
+min_distance = 5  # Minimum distance between local maxima
+radius_threshold = 5  # Minimum radius of label to be considered a sperm
+
+x20_min_dist = 8
+x20_min_rad = 4
+# 20x -
+# 10x - 0.94 / 6 / 3
 
 
 # Purpose: Basic mask model prediction output
@@ -30,6 +35,7 @@ def pred_show(x_test, model):
     index_type = input('Choose index type (random, chosen)')
     if index_type == 'random':
         idx = random.randint(0, len(x_test))
+        print('Random index: ' + str(idx))
     elif index_type == 'chosen':
         idx = int(input('Select index: '))
     else:
@@ -101,7 +107,7 @@ def watershed_pred(x_test, y_test, model):
     # print("[COUNT] {} unique instances found".format(len(np.unique(labels)) - 1))
 
     # Count of sperm
-    count = 0
+    sperm_count = 0
 
     # Loop through unique labels
     for label in np.unique(labels):
@@ -122,11 +128,11 @@ def watershed_pred(x_test, y_test, model):
         ((x, y), r) = cv2.minEnclosingCircle(c)
         if r > radius_threshold:
             cv2.circle(x_img_cpy, (int(x), int(y)), int(r), (0, 255, 0), 1)
-            cv2.putText(x_img_cpy, "{}".format(label), (int(x) - 10, int(y) - 2), cv2.FONT_HERSHEY_SIMPLEX, 0.3,
-                        (0, 0, 255), 1)
-            count += 1
+            cv2.putText(x_img_cpy, "{}".format(sperm_count + 1), (int(x) - 10, int(y) - 2), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.3, (0, 0, 255), 1)
+            sperm_count += 1
 
-    print("[COUNT] {} unique instances found".format(count))
+    print("[COUNT] {} unique instances found".format(sperm_count))
 
     # Plot images for pipeline progression
     plt.figure(1)  # Original Image
@@ -279,14 +285,17 @@ def count_metric(height_ratio, width_ratio, height, width, label, ground_truth, 
     fp = 0
 
     # Loop through every truth image and append the found coordinates
+    ground_truth_full = np.empty((width_ratio * width, height_ratio * height), np.bool)
     for i in range(height_ratio):
         for j in range(width_ratio):
             idx = i * width_ratio + j
-            coord_xy = count(ground_truth[idx], 8, 4)[1]
-            for coord in coord_xy:
-                coord_x = coord[0] / width_ratio + j * (width / width_ratio)
-                coord_y = coord[1] / height_ratio + i * (height / height_ratio)
-                truth_xy.append((coord_x, coord_y))
+            ground_truth_full[i * width:(i + 1)*width, j * height:(j + 1)*height] = ground_truth[idx]
+
+    coord_xy = count(ground_truth_full, x20_min_dist, x20_min_rad)[1]
+    for coord in coord_xy:
+        coord_x = coord[0] / width_ratio
+        coord_y = coord[1] / height_ratio
+        truth_xy.append((coord_x, coord_y))
 
     # Create a tree and then use it to find the nearest spatial coordinate until there are no more values left
     if len(truth_xy) > 1:

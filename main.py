@@ -13,14 +13,14 @@ from tensorflow.keras.callbacks import EarlyStopping, TensorBoard, ModelCheckpoi
 from datagen import create_train_arrays, create_generators  # Data importer functions
 from model import create_unet, calculate_weight, weighted_binary_crossentropy, dice_coef, evaluate_model  # U-Net Model
 from tools import pred_show, watershed_pred, metrics, metrics_optimize, predict_set  # Test model prediction
-from data import slice_data, check_data, blank_filter  # Data manipulation tools
+from data import slice_data, check_data, blank_filter, preprocess, combine_labels  # Data manipulation tools
 
 # Constants
 MAGNIFICATION = 10
-RAW_IMG_HEIGHT = 1040
-RAW_IMG_WIDTH = 1392
-RESIZE_IMG_HEIGHT = MAGNIFICATION / 20 * 1024
-RESIZE_IMG_WIDTH = MAGNIFICATION / 20 * 1024
+RAW_IMG_HEIGHT = 2424
+RAW_IMG_WIDTH = 2424
+RESIZE_IMG_HEIGHT = MAGNIFICATION / 20 * 2304
+RESIZE_IMG_WIDTH = MAGNIFICATION / 20 * 2304
 IMG_HEIGHT = 256
 IMG_WIDTH = 256
 IMG_CHANNELS = 3
@@ -30,17 +30,20 @@ VALID_SPLIT = 0.1
 METRIC_DISTANCE = 4
 
 # Dataset paths
+TIFF_PATH = 'D:/Fertility Data/Export/'
+TIFF_OUT = 'D:/Fertility Data/New/'
 DATA_RAW_PATH = 'Data_Full/'
 LABEL_RAW_PATH = 'Label_Full/'
-SIZED_DATA_PATH = 'Data_' + str(MAGNIFICATION) + 'x/'
-SIZED_LABEL_PATH = 'Label_' + str(MAGNIFICATION) + 'x/'
-DATA_PATH = 'Data_Filtered_' + str(MAGNIFICATION) + 'x/'
-LABEL_PATH = 'Label_Filtered_' + str(MAGNIFICATION) + 'x/'
+SIZED_DATA_PATH = 'D:/Fertility Data/New/Data/'
+SIZED_LABEL_PATH = 'D:/Fertility Data/New/Label/'
+DATA_PATH = 'D:/Fertility Data/New/Data_Filtered_' + str(MAGNIFICATION) + 'x/'
+LABEL_PATH = 'D:/Fertility Data/New/Label_Filtered_' + str(MAGNIFICATION) + 'x/'
 PREDICT_PATH = 'Predict_' + str(MAGNIFICATION) + 'x/'
 DATA_SAVE = 'numpy_data/'
 MODEL_SAVE = 'saved_models/model'
-SAVE_POSTFIX = '_' + str(MAGNIFICATION) + 'x'
+SAVE_POSTFIX = '_new_' + str(MAGNIFICATION) + 'x'
 MODEL_POSTFIX = SAVE_POSTFIX + '_high_drop'
+
 
 # Checkpoints to keep the best weights
 checkpoint_path = "checkpoints/test.ckpt"
@@ -48,7 +51,7 @@ checkpoint_dir = os.path.dirname(checkpoint_path)
 
 # Create checkpoints/callbacks to stop and save before overfitting
 callbacks = [
-    EarlyStopping(patience=0, monitor='val_loss'),
+    EarlyStopping(patience=1, monitor='val_loss'),
     TensorBoard(log_dir='./logs/' + MODEL_POSTFIX),
     ModelCheckpoint(checkpoint_path, monitor='val_loss', save_best_only=True, verbose=1)
 ]
@@ -69,10 +72,18 @@ if __name__ == '__main__':
     # Prompt until program is terminated
     while state != 'exit':
         # Select starting state
-        state = input('Select mode: (slice, filter, data, load_data, weight, train, load_model, checkpoint, evaluate, '
-                      'predict, metrics, metrics_optimize, test, check, predict, exit)')
+        state = input('Select mode: (tiff, slice, filter, data, load_data, weight, train, load_model, checkpoint, '
+                      'evaluate, predict, metrics, metrics_optimize, test, check, predict, exit)')
 
-        if state == 'slice':
+        if state == 'tiff':
+            preprocess(TIFF_PATH, TIFF_OUT + 'Data/', TIFF_OUT + 'Alive/', TIFF_OUT + 'Dead/', IMG_HEIGHT, IMG_WIDTH)
+            print('Preprocessing complete')
+
+        elif state == 'combine':
+            combine_labels(TIFF_OUT + 'Alive/', TIFF_OUT + 'Dead/', TIFF_OUT + 'Label/')
+            print('Labels combined')
+
+        elif state == 'slice':
             # Cuts up image into desired final dimensions
             slice_data(DATA_RAW_PATH, LABEL_RAW_PATH, SIZED_DATA_PATH, SIZED_LABEL_PATH, RESIZE_IMG_HEIGHT,
                        RESIZE_IMG_WIDTH, IMG_HEIGHT, IMG_WIDTH)
@@ -105,8 +116,8 @@ if __name__ == '__main__':
 
         elif state == 'train':
             # Use create_generators to make the generators for the model training
-            if not train_generator and not val_generator:
-                train_generator, val_generator = create_generators(x_train, y_train, VALID_SPLIT, BATCH_SIZE)
+            if not train_generator:
+                train_generator, val_generator, test_generator = create_generators(DATA_PATH, LABEL_PATH, BATCH_SIZE)
                 print('Generators created')
 
             # Create the UNet Architecture model
@@ -114,8 +125,8 @@ if __name__ == '__main__':
             print('CNN Model created')
 
             # Using Image Generators with a 10% validation split
-            results = model.fit(train_generator, validation_data=val_generator, steps_per_epoch=8000, epochs=EPOCHS,
-                                validation_steps=800, callbacks=callbacks, verbose=1)
+            results = model.fit(train_generator, validation_data=val_generator, steps_per_epoch=2000, epochs=EPOCHS,
+                                validation_steps=200, callbacks=callbacks, verbose=1)
             print('Model trained')
 
             # Save model
@@ -144,8 +155,8 @@ if __name__ == '__main__':
 
         elif state == 'evaluate':
             # Use create_generators to make the generators for the model training
-            if not train_generator and not val_generator:
-                train_generator, val_generator = create_generators(x_train, y_train, VALID_SPLIT, BATCH_SIZE)
+            if not train_generator:
+                train_generator, val_generator, test_generator = create_generators(DATA_PATH, LABEL_PATH, BATCH_SIZE)
                 print('Generators created')
 
             # Evaluate model using validation data generator
