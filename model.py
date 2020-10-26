@@ -3,10 +3,8 @@ import numpy as np
 import tensorflow.python.keras.backend as k
 
 
-from tensorflow.keras.layers import Input, Lambda, Conv2D, Dropout, MaxPooling2D, Conv2DTranspose, concatenate, \
-    BatchNormalization  # Model
+from tensorflow.keras.layers import Input, Lambda, Conv2D, Dropout, MaxPooling2D, Conv2DTranspose, concatenate  # Model
 from tensorflow.keras import Model  # Compile and show summary of model
-from tensorflow.keras.optimizers import Adam, SGD  # Adam optimizer with adjustable parameters
 
 
 # Purpose: Custom Keras loss to train with weighted sperm cell labels to have more importance
@@ -128,8 +126,8 @@ def create_unet(width, height, channels):
 #   model: trained model to be evaluated
 #   val_generator: generate validation data to predict
 #   batch_size: same batch size as the training
-def evaluate_model(model, val_generator, batch_size):
+def evaluate_model(model, test_generator, batch_size, steps):
     # Evaluate using model.evaluate using the entire generator set
-    results = model.evaluate(val_generator, batch_size=batch_size)
+    results = model.evaluate(test_generator, batch_size=batch_size, steps=steps)
 
     return results

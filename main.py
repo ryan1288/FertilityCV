@@ -24,7 +24,7 @@ RESIZE_IMG_WIDTH = MAGNIFICATION / 20 * 2304
 IMG_HEIGHT = 256
 IMG_WIDTH = 256
 IMG_CHANNELS = 3
-BATCH_SIZE = 2
+BATCH_SIZE = 8
 EPOCHS = 10
 VALID_SPLIT = 0.1
 METRIC_DISTANCE = 4
@@ -57,7 +57,7 @@ callbacks = [
 ]
 
 # Initialize dataset variables
-x_test = x_train = y_train = model = watershed_counts = train_generator = val_generator = None
+x_test = x_train = y_train = model = watershed_counts = train_generator = val_generator = test_generator = None
 
 # Set GPU memory growth
 physical_devices = tf.config.experimental.list_physical_devices('GPU')
@@ -125,8 +125,10 @@ if __name__ == '__main__':
             print('CNN Model created')
 
             # Using Image Generators with a 10% validation split
-            results = model.fit(train_generator, validation_data=val_generator, steps_per_epoch=2000, epochs=EPOCHS,
-                                validation_steps=200, callbacks=callbacks, verbose=1)
+            results = model.fit(train_generator, validation_data=val_generator,
+                                steps_per_epoch=len(os.listdir(DATA_PATH + 'train/train/'))//BATCH_SIZE, epochs=EPOCHS,
+                                validation_steps=len(os.listdir(DATA_PATH + 'valid/valid/'))//BATCH_SIZE,
+                                callbacks=callbacks, verbose=1)
             print('Model trained')
 
             # Save model
@@ -160,7 +162,7 @@ if __name__ == '__main__':
                 print('Generators created')
 
             # Evaluate model using validation data generator
-            results = evaluate_model(model, val_generator, BATCH_SIZE)
+            results = evaluate_model(model, test_generator, 1, len(os.listdir(DATA_PATH + 'test/test/'))//BATCH_SIZE)
             print('Completed Evaluation')
             print(results)
 
