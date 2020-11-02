@@ -13,35 +13,33 @@ from tensorflow.keras.callbacks import EarlyStopping, TensorBoard, ModelCheckpoi
 from datagen import create_train_arrays, create_generators  # Data importer functions
 from model import create_unet, calculate_weight, weighted_binary_crossentropy, dice_coef, evaluate_model  # U-Net Model
 from tools import pred_show, watershed_pred, metrics, metrics_optimize, predict_set  # Test model prediction
-from data import slice_data, check_data, blank_filter, preprocess, combine_labels  # Data manipulation tools
+from data import check_data, blank_filter, preprocess, combine_labels  # Data manipulation tools
 
 # Constants
 MAGNIFICATION = 10
 RAW_IMG_HEIGHT = 2424
 RAW_IMG_WIDTH = 2424
-RESIZE_IMG_HEIGHT = MAGNIFICATION / 20 * 2304
-RESIZE_IMG_WIDTH = MAGNIFICATION / 20 * 2304
 IMG_HEIGHT = 256
 IMG_WIDTH = 256
 IMG_CHANNELS = 3
-BATCH_SIZE = 8
+BATCH_SIZE = 2
 EPOCHS = 10
 VALID_SPLIT = 0.1
 METRIC_DISTANCE = 4
 
 # Dataset paths
-TIFF_PATH = 'D:/Fertility Data/Export/'
-TIFF_OUT = 'D:/Fertility Data/New/'
-DATA_RAW_PATH = 'Data_Full/'
-LABEL_RAW_PATH = 'Label_Full/'
-SIZED_DATA_PATH = 'D:/Fertility Data/New/Data/'
-SIZED_LABEL_PATH = 'D:/Fertility Data/New/Label/'
-DATA_PATH = 'D:/Fertility Data/New/Data_Filtered_' + str(MAGNIFICATION) + 'x/'
-LABEL_PATH = 'D:/Fertility Data/New/Label_Filtered_' + str(MAGNIFICATION) + 'x/'
-PREDICT_PATH = 'Predict_' + str(MAGNIFICATION) + 'x/'
+IMAGE_PATH = 'D:/FertilityCV/'
+DATA_SOURCE = IMAGE_PATH + 'New/'
+TIFF_PATH = DATA_SOURCE + 'Export/'
+SIZED_PATH = DATA_SOURCE + 'Original/'
+FILTER_PATH = DATA_SOURCE + 'AutoFilter/'
+DATA_PATH = DATA_SOURCE + 'Filtered/Data/'
+LABEL_PATH = DATA_SOURCE + 'Filtered/Label/'
+PREDICT_PATH = DATA_SOURCE + 'Predict/'
+
 DATA_SAVE = 'numpy_data/'
 MODEL_SAVE = 'saved_models/model'
-SAVE_POSTFIX = '_new_' + str(MAGNIFICATION) + 'x'
+SAVE_POSTFIX = '_new2_' + str(MAGNIFICATION) + 'x'
 MODEL_POSTFIX = SAVE_POSTFIX + '_high_drop'
 
 
@@ -58,6 +56,7 @@ callbacks = [
 
 # Initialize dataset variables
 x_test = x_train = y_train = model = watershed_counts = train_generator = val_generator = test_generator = None
+precision = recall = f1 = None
 
 # Set GPU memory growth
 physical_devices = tf.config.experimental.list_physical_devices('GPU')
@@ -76,28 +75,24 @@ if __name__ == '__main__':
                       'evaluate, predict, metrics, metrics_optimize, test, check, predict, exit)')
 
         if state == 'tiff':
-            preprocess(TIFF_PATH, TIFF_OUT + 'Data/', TIFF_OUT + 'Alive/', TIFF_OUT + 'Dead/', IMG_HEIGHT, IMG_WIDTH)
+            preprocess(TIFF_PATH, SIZED_PATH + 'Data/', SIZED_PATH + 'Alive/', SIZED_PATH + 'Dead/', IMG_HEIGHT,
+                       IMG_WIDTH)
             print('Preprocessing complete')
 
         elif state == 'combine':
-            combine_labels(TIFF_OUT + 'Alive/', TIFF_OUT + 'Dead/', TIFF_OUT + 'Label/')
+            combine_labels(SIZED_PATH + 'Alive/', SIZED_PATH + 'Dead/', SIZED_PATH + 'Label/')
             print('Labels combined')
-
-        elif state == 'slice':
-            # Cuts up image into desired final dimensions
-            slice_data(DATA_RAW_PATH, LABEL_RAW_PATH, SIZED_DATA_PATH, SIZED_LABEL_PATH, RESIZE_IMG_HEIGHT,
-                       RESIZE_IMG_WIDTH, IMG_HEIGHT, IMG_WIDTH)
-            print('Sliced images')
 
         elif state == 'filter':
             # Filters out empty labels and evident outliers (large white blobs covering > 25% of the label)
-            blank_filter(SIZED_DATA_PATH, SIZED_LABEL_PATH, DATA_PATH, LABEL_PATH, RESIZE_IMG_HEIGHT, RESIZE_IMG_WIDTH,
+            blank_filter(SIZED_PATH + 'Data/', SIZED_PATH + 'Label/', FILTER_PATH + 'Data/', FILTER_PATH + 'Label/',
                          IMG_HEIGHT, IMG_WIDTH)
             print('Filtered blank images')
 
         elif state == 'data':
             # Use create_image_arrays() to turn the dataset into arrays
-            x_train, y_train = create_train_arrays(DATA_PATH, LABEL_PATH, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
+            x_train, y_train = create_train_arrays(DATA_PATH + 'test/test/', LABEL_PATH + 'test/test/',
+                                                   IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
             np.save(DATA_SAVE + 'x_train' + SAVE_POSTFIX, x_train)
             np.save(DATA_SAVE + 'y_train' + SAVE_POSTFIX, y_train)
             print('Numpy arrays saved')
@@ -168,25 +163,27 @@ if __name__ == '__main__':
 
         elif state == 'predict':
             # Predicts and outputs a set of labels into a directory
-            predict_set(model, SIZED_DATA_PATH, PREDICT_PATH)
+            predict_set(model, DATA_PATH, PREDICT_PATH)
 
         elif state == 'metrics':
             # Determine scale of metric to calculate
             scale = input('Metric scale: (single, full)')
-            if scale == 'single' or scale == 'full':
-                # Calculates precision/recall based on a single image or the full dataset
-                precision, recall, f1 = metrics(SIZED_DATA_PATH, PREDICT_PATH, 'Predict_20x/', RESIZE_IMG_HEIGHT,
-                                                RESIZE_IMG_WIDTH, IMG_HEIGHT, IMG_WIDTH, METRIC_DISTANCE, scale)
-                print('Precision: ' + str(precision))
-                print('Recall: ' + str(recall))
-                print('F1-score: ' + str(f1))
+            # Calculates precision/recall based on a single image or the full dataset
+            precision, recall, f1 = metrics(DATA_PATH, LABEL_PATH, PREDICT_PATH, METRIC_DISTANCE, scale)
+            print('Precision: ' + str(precision))
+            print('Recall: ' + str(recall))
+            print('F1-score: ' + str(f1))
 
         elif state == 'metrics_optimize':
             # Outputs a range of thresholds and minimum distances
-            metrics_optimize(model, SIZED_DATA_PATH, PREDICT_PATH, RESIZE_IMG_HEIGHT, RESIZE_IMG_WIDTH, IMG_HEIGHT,
-                             IMG_WIDTH)
+            metrics_optimize(model, DATA_PATH, LABEL_PATH, PREDICT_PATH, IMG_HEIGHT, IMG_WIDTH)
 
         elif state == 'test':
+            if model is None:
+                # Load model
+                model = load_model(MODEL_SAVE + MODEL_POSTFIX + '.h5',
+                                   custom_objects={'weighted_binary_crossentropy': weighted_binary_crossentropy,
+                                                   'dice_coef': dice_coef})
             # Select test and data type
             test_type = input('Select test type: (basic, watershed)')
 

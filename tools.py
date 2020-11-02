@@ -16,12 +16,12 @@ from scipy import spatial  # KD Tree used to locate the nearest sperm in the lab
 from math import sqrt, pow  # Math functions to manually calculate the distances if there is only one label
 
 # Constant values for testing
-predict_threshold = 0.94  # Thresholding sperm counting
-min_distance = 5  # Minimum distance between local maxima
-radius_threshold = 5  # Minimum radius of label to be considered a sperm
+predict_threshold = 0.93  # Thresholding sperm counting
+min_distance = 4  # Minimum distance between local maxima
+radius_threshold = 3  # Minimum radius of label to be considered a sperm
 
-x20_min_dist = 8
-x20_min_rad = 4
+x10_min_dist = 6
+x10_min_rad = 3
 # 20x -
 # 10x - 0.94 / 6 / 3
 
@@ -188,79 +188,67 @@ def count(image, min_dist=min_distance, rad_threshold=radius_threshold):
     return sperm_count, label_xy
 
 
-# Purpose: Traverse the directory to match labels with the predicted ground truths at 20x
-def metrics(data_path, label_predict, label_truth, resized_height, resized_width, height, width, distance_threshold,
-            scale, rad_threshold=radius_threshold):
+# Purpose: Traverse the directory to match labels with the fluorescent ground truth labels
+def metrics(data_path, label_path, predict_path, distance_threshold, scale, rad_threshold=radius_threshold):
+    # Early declaration of folders
+    folder_list = ['train/train/', 'valid/valid/', 'test/test/']
+
     # Declare true and false positives
-    tp = 0
-    fp = 0
-    fn = 0
+    tp = fp = fn = precision = recall = f1 = 0
 
-    # Calculate # of cut-outs from the original image
-    height_ratio = int(1024 // resized_height)
-    width_ratio = int(1024 // resized_width)
+    if scale == 'single':
+        # Get random index in training dataset
+        predict_list = os.listdir(data_path + folder_list[0])
+        idx = random.randint(0, len(predict_list))
+        print('Index: ' + str(idx))
 
-    # Get list of predicted images in a directory
-    predict_list = os.listdir(label_predict)
-
-    # Loop through every image using given path and unique folder identifier
-    for idx in tqdm(range(len(predict_list))):
-        if scale == 'single':
-            idx = random.randint(0, len(predict_list))
-            print('Index: ' + str(idx))
+        # Get a randomized idx if only a single image is selected
         image = predict_list[idx]
-        path = label_predict + image
+
+        # Get a picture and convert it to 3 channels to draw on
+        path = data_path + folder_list[0] + image
+        pic = imread(path)
+        pic = gray2rgb(pic)
+
+        # Get the label image to put through the model
+        path = label_path + folder_list[0] + image
         img = imread(path)
-        
-        ground_truth = list()
-        predict_num = int(image[-7])
-        if height_ratio == 2:
-            if predict_num == 0:
-                series = [0, 1, 4, 5]
-            elif predict_num == 1:
-                series = [2, 3, 6, 7]
-            elif predict_num == 2:
-                series = [8, 9, 12, 13]
-            elif predict_num == 3:
-                series = [10, 11, 14, 15]
-            else:
-                print('Out of range')
-        else:
-            series = range(16)
 
-        # Traversal by row left to right
-        for i in range(height_ratio):
-            for j in range(width_ratio):
-                img_path = label_truth + image[:-7] + str(series[i * height_ratio + j]) + image[-6:]
-                truth = imread(img_path)
-                ground_truth.append(truth)
+        # Get the ground truth label to compare to the prediction
+        path = predict_path + image
+        ground_truth = imread(path)
 
-        if scale == 'single':
-            # Get a picture and convert it to 3 channels to draw on
-            path = data_path + image
-            pic = imread(path)
-            pic = gray2rgb(pic)
+        # Pass to count_metric to calculate the metrics for this one image
+        precision, recall, f1, drawn = count_metric(img, ground_truth, distance_threshold, scale, rad_threshold, pic)
 
-            # Pass to count_metric to calculate the metrics for this one image
-            precision, recall, f1, drawn = count_metric(height_ratio, width_ratio, height, width, img, ground_truth,
-                                                        distance_threshold, scale, rad_threshold, pic)
+        # Show the image with circles drawn for tp, fp, fn
+        imshow(drawn)
+        plt.show()
+        return precision, recall, f1
 
-            # Show the image with circles drawn for tp, fp, fn
-            imshow(drawn)
-            plt.show()
-            return precision, recall, f1
-        else:
-            # If full dataset, accumulate true positives, false positives, and false negatives for the final calculation
-            tp_, fp_, fn_ = count_metric(height_ratio, width_ratio, height, width, img, ground_truth,
-                                         distance_threshold, scale, rad_threshold)
-            tp += tp_
-            fp += fp_
-            fn += fn_
+    elif scale == 'full':
+        for folder in folder_list:
+            predict_list = os.listdir(label_path + folder)
+            # Loop through every image using given path and unique folder identifier
+            for image in tqdm(predict_list):
+                # Get the label image to put through the model
+                path = label_path + folder + image
+                img = imread(path)
 
-    # Calculate precision, recall, and F1 score
-    precision = tp / (tp + fp)
-    recall = tp / (tp + fn)
-    f1 = 2 * (precision * recall) / (precision + recall)
+                # Get the ground truth label to compare to the prediction
+                path = predict_path + image
+                ground_truth = imread(path)
+
+                # If full dataset, accumulate true positives, false positives, and false negatives
+                tp_, fp_, fn_ = count_metric(img, ground_truth, distance_threshold, scale, rad_threshold)
+                tp += tp_
+                fp += fp_
+                fn += fn_
+
+        # Calculate precision, recall, and F1 score
+        precision = tp / (tp + fp)
+        recall = tp / (tp + fn)
+        f1 = 2 * (precision * recall) / (precision + recall)
 
     return precision, recall, f1
 
@@ -274,55 +262,42 @@ def metrics(data_path, label_predict, label_truth, resized_height, resized_width
 #   label: input predicted label
 #   ground_truth: 3D array of the ground truth based on 20x magnification
 #   distance_threshold: Distance for a sperm to be considered a true positive (must be within a sperm's radius)
-def count_metric(height_ratio, width_ratio, height, width, label, ground_truth, distance_threshold, scale,
-                 rad_threshold=radius_threshold, pic=None):
-    # Get the predicted coordinates from count() and create a truth_xy to append scaled coordinates to
-    label_xy = count(label, distance_threshold, rad_threshold)[1]
-    truth_xy = list()
-
+def count_metric(label, ground_truth, distance_threshold, scale, rad_threshold=radius_threshold, pic=None):
     # Declare true and false positives
-    tp = 0
-    fp = 0
+    tp = fp = 0
 
-    # Loop through every truth image and append the found coordinates
-    ground_truth_full = np.empty((width_ratio * width, height_ratio * height), np.bool)
-    for i in range(height_ratio):
-        for j in range(width_ratio):
-            idx = i * width_ratio + j
-            ground_truth_full[i * width:(i + 1)*width, j * height:(j + 1)*height] = ground_truth[idx]
+    # Get the predicted coordinates from count() and create a label_xy to append scaled coordinates to
+    label_xy = count(label, distance_threshold, rad_threshold)[1]
 
-    coord_xy = count(ground_truth_full, x20_min_dist, x20_min_rad)[1]
-    for coord in coord_xy:
-        coord_x = coord[0] / width_ratio
-        coord_y = coord[1] / height_ratio
-        truth_xy.append((coord_x, coord_y))
+    # Count x_y coordinates in ground truth image
+    coord_xy = count(ground_truth, x10_min_dist, x10_min_rad)[1]
 
     # Create a tree and then use it to find the nearest spatial coordinate until there are no more values left
-    if len(truth_xy) > 1:
-        truth_tree = spatial.KDTree(truth_xy)
+    if len(coord_xy) > 1:
+        truth_tree = spatial.KDTree(coord_xy)
 
     # Continue as long as there is a predicted sperm coordinate left
     while label_xy:
         predicted_xy = label_xy.pop()
 
         # Use the KD spatial tree if there is more tha none node
-        if len(truth_xy) > 1:
+        if len(coord_xy) > 1:
             nearest = truth_tree.query(predicted_xy)
         # Otherwise, use use manual calculations
-        elif len(truth_xy) == 1:
+        elif len(coord_xy) == 1:
             nearest = [0, 0]
-            nearest[0] = sqrt(pow(predicted_xy[0] - truth_xy[0][0], 2) + pow(predicted_xy[1] - truth_xy[0][1], 2))
+            nearest[0] = sqrt(pow(predicted_xy[0] - coord_xy[0][0], 2) + pow(predicted_xy[1] - coord_xy[0][1], 2))
             nearest[1] = 0
 
         # Only accept values within a distance threshold, then draw it on the image if only checking a single image
-        if len(truth_xy) > 0 and nearest[0] < distance_threshold:
+        if len(coord_xy) > 0 and nearest[0] < distance_threshold:
             if scale == 'single':
                 cv2.circle(pic, (int(predicted_xy[0]), int(predicted_xy[1])), distance_threshold - 1, (0, 255, 0), 1)
             # Remove the found positive label
-            del truth_xy[int(nearest[1])]
+            del coord_xy[int(nearest[1])]
             # Re-generate a KD tree
-            if len(truth_xy) > 1:
-                truth_tree = spatial.KDTree(truth_xy)
+            if len(coord_xy) > 1:
+                truth_tree = spatial.KDTree(coord_xy)
             tp += 1
         # Otherwise, it's a false positive if there are no nearby true coordinates
         else:
@@ -331,9 +306,9 @@ def count_metric(height_ratio, width_ratio, height, width, label, ground_truth, 
             fp += 1
 
     # Number of false negatives is the number of coordinates left
-    fn = len(truth_xy)
+    fn = len(coord_xy)
     if scale == 'single':
-        for false_n in truth_xy:
+        for false_n in coord_xy:
             cv2.circle(pic, (int(false_n[0]), int(false_n[1])), distance_threshold - 1, (255, 0, 0), 1)
 
     # Calculate precision, recall, and F1 score
@@ -360,31 +335,41 @@ def count_metric(height_ratio, width_ratio, height, width, label, ground_truth, 
 #   data_from: data path to obtain images and names from
 #   predict_to: data path to store predicted labels
 def predict_set(model, data_from, predict_to, threshold=predict_threshold):
-    # Create an iterable list through the directory
-    imagelist = os.listdir(data_from)
+    # Create folder list for all three data types
+    folder_list = ['train/train/', 'valid/valid/', 'test/test/']
 
-    # Loop through every image using given path and unique folder identifier
-    for image in tqdm(imagelist):
-        # Get image from the name
-        path = data_from + image
-        img = imread(path)
+    # Loop through folder list
+    for folder in folder_list:
+        # Create an iterable list through the directory
+        imagelist = os.listdir(data_from + folder)
 
-        # Convert into three channels and expand dims to input to model
-        img_rgb = gray2rgb(img)
-        img_in = np.expand_dims(img_rgb, axis=0)
+        # Loop through every image using given path and unique folder identifier
+        for image in tqdm(imagelist):
+            # Get image from the name
+            path = data_from + folder + image
+            img = imread(path)
 
-        # Convert model prediction to a binary label using a threshold after predicting
-        predict = model.predict(img_in, verbose=0)
-        predict_thresh = img_as_ubyte((predict > threshold).astype(np.bool))
+            # Convert into three channels and expand dims to input to model
+            img_rgb = gray2rgb(img)
+            img_in = np.expand_dims(img_rgb, axis=0)
 
-        # Reformat the label to the correct dimensions
-        predict_img = np.squeeze(predict_thresh)
+            # Convert model prediction to a binary label using a threshold after predicting
+            predict = model.predict(img_in, verbose=0)
+            predict_thresh = img_as_ubyte((predict > threshold).astype(np.bool))
 
-        # Save the predicted label
-        imsave(predict_to + image, predict_img, check_contrast=False)
+            # Reformat the label to the correct dimensions
+            predict_img = np.squeeze(predict_thresh)
+
+            # Save the predicted label
+            imsave(predict_to + image, predict_img, check_contrast=False)
 
 
-def metrics_optimize(model, data_from, predict_path, resized_height, resized_width, height, width):
+# Purpose: Evaluate the model using the model.evaluate function
+# Parameters:
+#   model: trained model used to predict images
+#   data_from: data path to obtain images and names from
+#   predict_path: data path of stored predicted labels
+def metrics_optimize(model, data_path, label_path, predict_path, height, width):
     # Lists of metric outputs
     precisions = list()
     recalls = list()
@@ -397,11 +382,11 @@ def metrics_optimize(model, data_from, predict_path, resized_height, resized_wid
     min_rad_list = min_rad_str.split()
 
     for predict_thresh in predict_thresh_list:
-        predict_set(model, data_from, predict_path, float(predict_thresh))
+        predict_set(model, data_path, predict_path, float(predict_thresh))
         for min_rad in min_rad_list:
             print('Prediction threshold:' + str(predict_thresh) + ' / Minimum radius: ' + str(min_rad))
-            precision, recall, f1 = metrics(data_from, predict_path, 'Predict_20x/', resized_height, resized_width,
-                                            height, width, min_distance, 'full', min_rad)
+            precision, recall, f1 = metrics(data_path, label_path, predict_path, height, width, min_distance, 'full',
+                                            min_rad)
             precisions.append(precision)
             recalls.append(recall)
             f1s.append(f1)

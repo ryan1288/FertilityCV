@@ -19,15 +19,6 @@ def weighted_binary_crossentropy(y_true, y_pred, weight=10.545254992234634):
     return k.mean(logloss, axis=-1)
 
 
-def dice_loss(y_true, y_pred, smooth=1):
-    intersection = k.sum(k.abs(y_true * y_pred), axis=-1)
-    return 1 - (2. * intersection + smooth) / (k.sum(k.square(y_true), -1) + k.sum(k.square(y_pred), -1) + smooth)
-
-
-def dice_wbce(y_true, y_pred):
-    return weighted_binary_crossentropy(y_true, y_pred) + dice_loss(y_true, y_pred)
-
-
 # Purpose: Scale-invariant metric that uses overlaps similar to MeanIoU
 # Parameters:
 #   y_true: ground truth label
