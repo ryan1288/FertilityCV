@@ -72,7 +72,7 @@ if __name__ == '__main__':
     while state != 'exit':
         # Select starting state
         state = input('Select mode: (tiff, slice, filter, data, load_data, weight, train, load_model, checkpoint, '
-                      'evaluate, predict, metrics, metrics_optimize, test, check, predict, exit)')
+                      'evaluate, predict, metrics, metrics_optimize, test, check, exit)')
 
         if state == 'tiff':
             preprocess(TIFF_PATH, SIZED_PATH + 'Data/', SIZED_PATH + 'Alive/', SIZED_PATH + 'Dead/', IMG_HEIGHT,
@@ -176,7 +176,7 @@ if __name__ == '__main__':
 
         elif state == 'metrics_optimize':
             # Outputs a range of thresholds and minimum distances
-            metrics_optimize(model, DATA_PATH, LABEL_PATH, PREDICT_PATH, IMG_HEIGHT, IMG_WIDTH)
+            metrics_optimize(model, DATA_PATH, LABEL_PATH, PREDICT_PATH)
 
         elif state == 'test':
             if model is None:

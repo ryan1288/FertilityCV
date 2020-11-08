@@ -16,9 +16,9 @@ from scipy import spatial  # KD Tree used to locate the nearest sperm in the lab
 from math import sqrt, pow  # Math functions to manually calculate the distances if there is only one label
 
 # Constant values for testing
-predict_threshold = 0.93  # Thresholding sperm counting
+predict_threshold = 0.94  # Thresholding sperm counting
 min_distance = 4  # Minimum distance between local maxima
-radius_threshold = 3  # Minimum radius of label to be considered a sperm
+radius_threshold = 2  # Minimum radius of label to be considered a sperm
 
 x10_min_dist = 6
 x10_min_rad = 3
@@ -204,6 +204,7 @@ def metrics(data_path, label_path, predict_path, distance_threshold, scale, rad_
 
         # Get a randomized idx if only a single image is selected
         image = predict_list[idx]
+        print('Image: ' + image)
 
         # Get a picture and convert it to 3 channels to draw on
         path = data_path + folder_list[0] + image
@@ -369,7 +370,7 @@ def predict_set(model, data_from, predict_to, threshold=predict_threshold):
 #   model: trained model used to predict images
 #   data_from: data path to obtain images and names from
 #   predict_path: data path of stored predicted labels
-def metrics_optimize(model, data_path, label_path, predict_path, height, width):
+def metrics_optimize(model, data_path, label_path, predict_path):
     # Lists of metric outputs
     precisions = list()
     recalls = list()
@@ -385,8 +386,7 @@ def metrics_optimize(model, data_path, label_path, predict_path, height, width):
         predict_set(model, data_path, predict_path, float(predict_thresh))
         for min_rad in min_rad_list:
             print('Prediction threshold:' + str(predict_thresh) + ' / Minimum radius: ' + str(min_rad))
-            precision, recall, f1 = metrics(data_path, label_path, predict_path, height, width, min_distance, 'full',
-                                            min_rad)
+            precision, recall, f1 = metrics(data_path, label_path, predict_path, min_distance, 'full', int(min_rad))
             precisions.append(precision)
             recalls.append(recall)
             f1s.append(f1)
