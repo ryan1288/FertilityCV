@@ -12,7 +12,7 @@ from tensorflow.keras.callbacks import EarlyStopping, TensorBoard, ModelCheckpoi
 # User-defined functions
 from datagen import create_train_arrays, create_generators  # Data importer functions
 from model import create_unet, calculate_weight, weighted_binary_crossentropy, dice_coef, evaluate_model  # U-Net Model
-from tools import pred_show, watershed_pred, metrics, metrics_optimize, predict_set  # Test model prediction
+from tools import pred_show, watershed_pred, metrics, metrics_optimize, predict_set, plot_roc  # Test model prediction
 from data import check_data, blank_filter, preprocess, combine_labels  # Data manipulation tools
 
 # Constants
@@ -36,10 +36,11 @@ FILTER_PATH = DATA_SOURCE + 'AutoFilter/'
 DATA_PATH = DATA_SOURCE + 'Filtered/Data/'
 LABEL_PATH = DATA_SOURCE + 'Filtered/Label/'
 PREDICT_PATH = DATA_SOURCE + 'Predict/'
+ROC_PATH = DATA_SOURCE + 'ROC/'
 
 DATA_SAVE = 'numpy_data/'
 MODEL_SAVE = 'saved_models/model'
-SAVE_POSTFIX = '_new2_' + str(MAGNIFICATION) + 'x'
+SAVE_POSTFIX = '_new_' + str(MAGNIFICATION) + 'x'
 MODEL_POSTFIX = SAVE_POSTFIX + '_high_drop'
 
 
@@ -72,7 +73,7 @@ if __name__ == '__main__':
     while state != 'exit':
         # Select starting state
         state = input('Select mode: (tiff, slice, filter, data, load_data, weight, train, load_model, checkpoint, '
-                      'evaluate, predict, metrics, metrics_optimize, test, check, exit)')
+                      'evaluate, predict, metrics, metrics_optimize, test, roc, check, exit)')
 
         if state == 'tiff':
             preprocess(TIFF_PATH, SIZED_PATH + 'Data/', SIZED_PATH + 'Alive/', SIZED_PATH + 'Dead/', IMG_HEIGHT,
@@ -91,7 +92,7 @@ if __name__ == '__main__':
 
         elif state == 'data':
             # Use create_image_arrays() to turn the dataset into arrays
-            x_train, y_train = create_train_arrays(DATA_PATH + 'test/test/', LABEL_PATH + 'test/test/',
+            x_train, y_train = create_train_arrays(DATA_PATH + 'train/train/', LABEL_PATH + 'train/train/',
                                                    IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
             np.save(DATA_SAVE + 'x_train' + SAVE_POSTFIX, x_train)
             np.save(DATA_SAVE + 'y_train' + SAVE_POSTFIX, y_train)
@@ -175,8 +176,27 @@ if __name__ == '__main__':
             print('F1-score: ' + str(f1))
 
         elif state == 'metrics_optimize':
-            # Outputs a range of thresholds and minimum distances
-            metrics_optimize(model, DATA_PATH, LABEL_PATH, PREDICT_PATH)
+            # Optimize a list of models if needed
+            model_input = input('Input model names? (y, n) ')
+            if model_input == 'y':
+                models = input('Input list of model names (separated by a space): ')
+                models = models.split()
+            else:
+                models = [MODEL_POSTFIX]
+
+            # Input range of parameters to be tested
+            predict_thresh_str = input('Input list of prediction thresholds (separated by a space): ')
+            min_rad_str = input('Input list of minimum radii (separated by a space): ')
+            predict_thresh_list = predict_thresh_str.split()
+            min_rad_list = min_rad_str.split()
+
+            # Outputs a range of thresholds and minimum distances for each model
+            for model_name in models:
+                model = load_model(MODEL_SAVE + model_name + '.h5',
+                                   custom_objects={'weighted_binary_crossentropy': weighted_binary_crossentropy,
+                                                   'dice_coef': dice_coef})
+                metrics_optimize(model, DATA_PATH, LABEL_PATH, PREDICT_PATH, model_name, predict_thresh_list,
+                                 min_rad_list)
 
         elif state == 'test':
             if model is None:
@@ -194,6 +214,15 @@ if __name__ == '__main__':
                 pred_show(x_train, model)
             elif test_type == 'watershed':
                 watershed_pred(x_train, y_train, model)
+
+        elif state == 'roc':
+            if model is None:
+                # Load model
+                model = load_model(MODEL_SAVE + MODEL_POSTFIX + '.h5',
+                                   custom_objects={'weighted_binary_crossentropy': weighted_binary_crossentropy,
+                                                   'dice_coef': dice_coef})
+            # Plot ROC Curve along with AUC (Area under curve)
+            plot_roc(model, DATA_PATH, LABEL_PATH, ROC_PATH, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
 
         elif state == 'check':
             # Check input data to visualize as images and values

@@ -15,7 +15,7 @@ from tensorflow.keras import Model  # Compile and show summary of model
 def weighted_binary_crossentropy(y_true, y_pred, weight=10.545254992234634):
     y_true = k.clip(y_true, k.epsilon(), 1-k.epsilon())
     y_pred = k.clip(y_pred, k.epsilon(), 1-k.epsilon())
-    logloss = -(y_true * k.log(y_pred) * weight + (1 - y_true) * k.log(1 - y_pred))
+    logloss = -(y_true * k.log(y_pred) + (1 - y_true) * k.log(1 - y_pred) / weight)
     return k.mean(logloss, axis=-1)
 
 
@@ -115,8 +115,9 @@ def create_unet(width, height, channels):
 # Purpose: Evaluate the model using the model.evaluate function
 # Parameters:
 #   model: trained model to be evaluated
-#   val_generator: generate validation data to predict
+#   test_generator: generate validation data to predict
 #   batch_size: same batch size as the training
+#   steps: # steps per epoch
 def evaluate_model(model, test_generator, batch_size, steps):
     # Evaluate using model.evaluate using the entire generator set
     results = model.evaluate(test_generator, batch_size=batch_size, steps=steps)

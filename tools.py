@@ -11,13 +11,15 @@ from skimage.color import gray2rgb  # Convert single
 from skimage.io import imshow, imread, imsave  # Show, read, and save images
 from skimage.feature import peak_local_max  # Use euclidian distances to find local maxes
 from skimage.segmentation import watershed  # Watershed tool to find labels
+from sklearn.metrics import roc_curve, auc  # roc curve tools
 from scipy import ndimage  # Part of watershed calculation to find markers
 from scipy import spatial  # KD Tree used to locate the nearest sperm in the label
 from math import sqrt, pow  # Math functions to manually calculate the distances if there is only one label
+from datagen import create_train_arrays  # To create the arrays for the ROC curve calculation
 
 # Constant values for testing
-predict_threshold = 0.94  # Thresholding sperm counting
-min_distance = 4  # Minimum distance between local maxima
+predict_threshold = 0.92  # Thresholding sperm counting
+min_distance = 6  # Minimum distance between local maxima
 radius_threshold = 2  # Minimum radius of label to be considered a sperm
 
 x10_min_dist = 6
@@ -67,9 +69,9 @@ def pred_show(x_test, model):
 
 # Purpose: Create data augmented generators that include the train-validation split for model training
 # Parameters:
-#   x_test: testing dataset
+#   x_test: testing dataset - image
+#   y_test: testing dataset - label
 #   model: CNN model used
-#   idx: index of test data to be segmented
 def watershed_pred(x_test, y_test, model):
     # Have a random or chosen predicted image
     index_type = input('Choose index type (random, chosen)')
@@ -148,9 +150,11 @@ def watershed_pred(x_test, y_test, model):
     plt.show()
 
 
-# Purpose: Use watershed to predict the number of sperm with coordinates
+# Purpose: Counts the number of unique labels and returns the coordinates and total count
 # Parameters:
 #   image: label to count
+#   min_dist: minimum distance between sperm centers threshold
+#   rad_threshold: minimum radius of circle enclosing sperm threshold
 def count(image, min_dist=min_distance, rad_threshold=radius_threshold):
     # Euclidian distance from background using distance_transform
     dist = ndimage.distance_transform_edt(image)
@@ -188,10 +192,17 @@ def count(image, min_dist=min_distance, rad_threshold=radius_threshold):
     return sperm_count, label_xy
 
 
-# Purpose: Traverse the directory to match labels with the fluorescent ground truth labels
+# Purpose: Computes the recall, precision, and F1-Score metrics by traversing through folders
+# Parameters:
+#   data_path: images directory
+#   label_path: label directory
+#   predict_path: prediction directory
+#   distance_threshold: minimum distance between sperm centers threshold
+#   scale: single image or full dataset testing
+#   rad_threshold: minimum radius of circle enclosing sperm threshold
 def metrics(data_path, label_path, predict_path, distance_threshold, scale, rad_threshold=radius_threshold):
     # Early declaration of folders
-    folder_list = ['train/train/', 'valid/valid/', 'test/test/']
+    folder_list = ['test/test/']
 
     # Declare true and false positives
     tp = fp = fn = precision = recall = f1 = 0
@@ -233,11 +244,11 @@ def metrics(data_path, label_path, predict_path, distance_threshold, scale, rad_
             # Loop through every image using given path and unique folder identifier
             for image in tqdm(predict_list):
                 # Get the label image to put through the model
-                path = label_path + folder + image
+                path = predict_path + image
                 img = imread(path)
 
                 # Get the ground truth label to compare to the prediction
-                path = predict_path + image
+                path = label_path + folder + image
                 ground_truth = imread(path)
 
                 # If full dataset, accumulate true positives, false positives, and false negatives
@@ -246,23 +257,21 @@ def metrics(data_path, label_path, predict_path, distance_threshold, scale, rad_
                 fp += fp_
                 fn += fn_
 
-        # Calculate precision, recall, and F1 score
-        precision = tp / (tp + fp)
-        recall = tp / (tp + fn)
-        f1 = 2 * (precision * recall) / (precision + recall)
+            precision = tp / (tp + fp)
+            recall = tp / (tp + fn)
+            f1 = 2 * (precision * recall) / (precision + recall)
 
     return precision, recall, f1
 
 
 # Purpose: Use the numpy arrays of the predicted label and ground truth to calculate precision, recall, and F1-score
 # Parameters:
-#   height_ratio: height ratio of slicing
-#   width_ratio: width ratio of slicing
-#   height: height of image
-#   width: width of image
 #   label: input predicted label
 #   ground_truth: 3D array of the ground truth based on 20x magnification
 #   distance_threshold: Distance for a sperm to be considered a true positive (must be within a sperm's radius)
+#   scale: single image or full dataset testing
+#   rad_threshold: minimum radius of circle enclosing sperm threshold
+#   pic: input image to draw on for visualization (optional)
 def count_metric(label, ground_truth, distance_threshold, scale, rad_threshold=radius_threshold, pic=None):
     # Declare true and false positives
     tp = fp = 0
@@ -313,7 +322,7 @@ def count_metric(label, ground_truth, distance_threshold, scale, rad_threshold=r
             cv2.circle(pic, (int(false_n[0]), int(false_n[1])), distance_threshold - 1, (255, 0, 0), 1)
 
     # Calculate precision, recall, and F1 score
-    if tp != 0:
+    if tp + fp != 0:
         precision = tp / (tp + fp)
         recall = tp / (tp + fn)
         f1 = 2 * (precision * recall) / (precision + recall)
@@ -330,19 +339,30 @@ def count_metric(label, ground_truth, distance_threshold, scale, rad_threshold=r
         return tp, fp, fn
 
 
-# Purpose: Evaluate the model using the model.evaluate function
+# Purpose: Predict a set of images
 # Parameters:
 #   model: trained model used to predict images
 #   data_from: data path to obtain images and names from
 #   predict_to: data path to store predicted labels
-def predict_set(model, data_from, predict_to, threshold=predict_threshold):
+#   threshold: binarization value between 0 and 1
+#   test_only: all folders or only test folder
+#   continuous: return continuous values pre-thresholding if enabled
+def predict_set(model, data_from, predict_to, threshold=predict_threshold, test_only=False, continuous=False):
     # Create folder list for all three data types
-    folder_list = ['train/train/', 'valid/valid/', 'test/test/']
+    if test_only:
+        folder_list = ['test/test/']
+    else:
+        folder_list = ['train/train', 'valid/valid', 'test/test/']
 
     # Loop through folder list
     for folder in folder_list:
         # Create an iterable list through the directory
         imagelist = os.listdir(data_from + folder)
+
+        # For continuous output
+        if continuous:
+            predictions = np.zeros((len(imagelist), 256, 256), dtype=np.float64)
+            i = 0
 
         # Loop through every image using given path and unique folder identifier
         for image in tqdm(imagelist):
@@ -356,32 +376,42 @@ def predict_set(model, data_from, predict_to, threshold=predict_threshold):
 
             # Convert model prediction to a binary label using a threshold after predicting
             predict = model.predict(img_in, verbose=0)
-            predict_thresh = img_as_ubyte((predict > threshold).astype(np.bool))
 
-            # Reformat the label to the correct dimensions
-            predict_img = np.squeeze(predict_thresh)
+            # Option to output pre-thresholding for continuous output values
+            if continuous:
+                predictions[i] = np.squeeze(predict)
+                print(predict)
+                i = i + 1
+            else:
+                predict_thresh = img_as_ubyte((predict > threshold).astype(np.bool))
 
-            # Save the predicted label
-            imsave(predict_to + image, predict_img, check_contrast=False)
+                # Reformat the label to the correct dimensions
+                predict_img = np.squeeze(predict_thresh)
+
+                # Save the predicted label
+                imsave(predict_to + image, predict_img, check_contrast=False)
+
+        # Return predictions for the single set if continuous
+        if continuous:
+            return predictions
 
 
-# Purpose: Evaluate the model using the model.evaluate function
+# Purpose: Calculate metrics for multiple binarization and radius thresholds
 # Parameters:
 #   model: trained model used to predict images
 #   data_from: data path to obtain images and names from
+#   label_path: label path to obtain masks from
 #   predict_path: data path of stored predicted labels
-def metrics_optimize(model, data_path, label_path, predict_path):
+#   model_name: model name to be printed
+#   predict_thresh_list: list of prediction binarization thresholds
+#   min_rad_list: list of minimum radius thresholds
+def metrics_optimize(model, data_path, label_path, predict_path, model_name, predict_thresh_list, min_rad_list):
     # Lists of metric outputs
     precisions = list()
     recalls = list()
     f1s = list()
 
-    # Input range of parameters to be tested
-    predict_thresh_str = input('Input list of prediction thresholds (separated by a space): ')
-    min_rad_str = input('Input list of minimum radii (separated by a space): ')
-    predict_thresh_list = predict_thresh_str.split()
-    min_rad_list = min_rad_str.split()
-
+    # Use metrics function on each prediction threshold to calculate individual metrics
     for predict_thresh in predict_thresh_list:
         predict_set(model, data_path, predict_path, float(predict_thresh))
         for min_rad in min_rad_list:
@@ -392,8 +422,47 @@ def metrics_optimize(model, data_path, label_path, predict_path):
             f1s.append(f1)
             print('Precision: ' + str(precision) + ' / Recall: ' + str(recall) + ' / F1-score: ' + str(f1))
 
+    # Display a summary of all prediction results
+    print('Model name: ' + model_name)
     for predict_thresh in predict_thresh_list:
         for min_rad in min_rad_list:
             print('Prediction threshold:' + str(predict_thresh) + ' / Minimum radius: ' + str(min_rad))
             print('Precision: ' + str(precisions.pop(0)) + ' / Recall: ' + str(recalls.pop(0)) + ' / F1-score: '
                   + str(f1s.pop(0)))
+
+
+# Purpose: Plot ROC curve for a model
+# Parameters:
+#   model: trained model used to predict images
+#   data_from: data path to obtain images and names from
+#   label_path: label path to obtain masks from
+#   roc_path: path to store generated roc curve
+#   height: image height
+#   width: image width
+#   channels: # of image channels
+def plot_roc(model, data_path, label_path, roc_path, height, width, channels):
+    # Create and load test arrays
+    x_test, y_test = create_train_arrays(data_path + 'test/test/', label_path + 'test/test/', height, width, channels)
+
+    # Predicts and outputs a set of labels into a directory
+    y_predict = predict_set(model, data_path, roc_path, test_only=True, continuous=True)
+
+    # Unravel values to a 1D vectors to use roc_curve
+    ground_truth_labels = y_test.ravel()
+    score_value = y_predict.ravel()
+
+    # Calculate false positive and true positive rates
+    fpr, tpr, _ = roc_curve(ground_truth_labels, score_value)
+    roc_auc = auc(fpr, tpr)
+
+    # Plot ROC with ROC value in the legend
+    fig, ax = plt.subplots(1, 1)
+    ax.plot(fpr, tpr, label='ROC curve (area = %0.3f)' % roc_auc)
+    ax.plot([0, 1], [0, 1], 'k--')
+    ax.set_xlim([0.0, 1.0])
+    ax.set_ylim([0.0, 1.05])
+    ax.set_xlabel('False Positive Rate')
+    ax.set_ylabel('True Positive Rate')
+    ax.set_title('Receiver Operating Characteristic - Sperm-only - High Dropout')
+    ax.legend(loc="lower right")
+    plt.show()

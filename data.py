@@ -67,6 +67,8 @@ def blank_filter(data_from, label_from, data_to, label_to, height, width):
 # Parameters:
 #   data_from: original data path
 #   data_to: filtered data path
+#   alive_to: alive channel images
+#   dead_to: dead channel images
 #   height: image height
 #   width: image width
 def preprocess(data_from, data_to, alive_to, dead_to, height, width):

@@ -48,7 +48,7 @@ def create_generators(x_train, y_train, batch_size):
     seed = 47  # Arbitrary value
 
     # Create generators that will augment the data for each epoch
-    """
+
     image_gen = tf.keras.preprocessing.image.ImageDataGenerator(rotation_range=45, zoom_range=0.2,
                                                                 width_shift_range=0.4, height_shift_range=0.4,
                                                                 brightness_range=(0.8, 1.2), fill_mode='reflect',
@@ -66,7 +66,7 @@ def create_generators(x_train, y_train, batch_size):
     mask_gen = tf.keras.preprocessing.image.ImageDataGenerator(rotation_range=80, zoom_range=0.4,
                                                                width_shift_range=0.4, height_shift_range=0.4,
                                                                fill_mode='reflect')
-
+    """
     # Creating the validation Image and Mask generator (no augmentation)
     image_gen_val = tf.keras.preprocessing.image.ImageDataGenerator()
     mask_gen_val = tf.keras.preprocessing.image.ImageDataGenerator()
