@@ -5,6 +5,7 @@
 import tensorflow as tf  # Tensorflow including the Keras package within
 import os  # os to access and use directories
 import numpy as np  # numpy for array operations
+import matplotlib.pyplot as plt  # For plotting diagrams
 
 from tensorflow.keras.models import load_model  # Load saved model
 from tensorflow.keras.callbacks import EarlyStopping, TensorBoard, ModelCheckpoint  # Callbacks to save/evaluate
@@ -13,7 +14,7 @@ from tensorflow.keras.callbacks import EarlyStopping, TensorBoard, ModelCheckpoi
 from datagen import create_train_arrays, create_generators  # Data importer functions
 from model import create_unet, calculate_weight, weighted_binary_crossentropy, dice_coef, evaluate_model  # U-Net Model
 from tools import pred_show, watershed_pred, metrics, metrics_optimize, predict_set, plot_roc  # Test model prediction
-from data import check_data, blank_filter, preprocess, combine_labels  # Data manipulation tools
+from data import check_data, blank_filter, preprocess, combine_labels, split_data  # Data manipulation tools
 
 # Constants
 MAGNIFICATION = 10
@@ -29,7 +30,7 @@ METRIC_DISTANCE = 4
 
 # Dataset paths
 IMAGE_PATH = 'D:/FertilityCV/'
-DATA_SOURCE = IMAGE_PATH + 'New/'
+DATA_SOURCE = IMAGE_PATH + 'Testis_2/'
 TIFF_PATH = DATA_SOURCE + 'Export/'
 SIZED_PATH = DATA_SOURCE + 'Original/'
 FILTER_PATH = DATA_SOURCE + 'AutoFilter/'
@@ -42,7 +43,7 @@ DATA_SAVE = 'numpy_data/'
 MODEL_SAVE = 'saved_models/model'
 SAVE_POSTFIX = '_new_' + str(MAGNIFICATION) + 'x'
 MODEL_POSTFIX = SAVE_POSTFIX + '_high_drop'
-
+# Best is _high_drop
 
 # Checkpoints to keep the best weights
 checkpoint_path = "checkpoints/test.ckpt"
@@ -72,12 +73,13 @@ if __name__ == '__main__':
     # Prompt until program is terminated
     while state != 'exit':
         # Select starting state
-        state = input('Select mode: (tiff, slice, filter, data, load_data, weight, train, load_model, checkpoint, '
-                      'evaluate, predict, metrics, metrics_optimize, test, roc, check, exit)')
+        state = input('Select mode: (tiff, slice, filter, split, data, load_data, weight, train, load_model, '
+                      'checkpoint, evaluate, predict, metrics, metrics_optimize, test, roc, check, exit)')
 
         if state == 'tiff':
+            channels = int(input('# Channels: (2, 3)'))
             preprocess(TIFF_PATH, SIZED_PATH + 'Data/', SIZED_PATH + 'Alive/', SIZED_PATH + 'Dead/', IMG_HEIGHT,
-                       IMG_WIDTH)
+                       IMG_WIDTH, channels)
             print('Preprocessing complete')
 
         elif state == 'combine':
@@ -89,6 +91,10 @@ if __name__ == '__main__':
             blank_filter(SIZED_PATH + 'Data/', SIZED_PATH + 'Label/', FILTER_PATH + 'Data/', FILTER_PATH + 'Label/',
                          IMG_HEIGHT, IMG_WIDTH)
             print('Filtered blank images')
+
+        elif state == 'split':
+            # Splits filtered dataset into training, validation, and test sets
+            split_data(FILTER_PATH + 'Data/', FILTER_PATH + 'Label/', DATA_PATH, LABEL_PATH)
 
         elif state == 'data':
             # Use create_image_arrays() to turn the dataset into arrays
@@ -222,7 +228,39 @@ if __name__ == '__main__':
                                    custom_objects={'weighted_binary_crossentropy': weighted_binary_crossentropy,
                                                    'dice_coef': dice_coef})
             # Plot ROC Curve along with AUC (Area under curve)
-            plot_roc(model, DATA_PATH, LABEL_PATH, ROC_PATH, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
+            model = load_model(MODEL_SAVE + '_10x' + '.h5',
+                               custom_objects={'weighted_binary_crossentropy': weighted_binary_crossentropy,
+                                               'dice_coef': dice_coef})
+            fpr, tpr, roc_auc = plot_roc(model, DATA_PATH, LABEL_PATH, ROC_PATH, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
+
+            # Plot ROC with ROC value in the legend
+            fig, ax = plt.subplots(1, 1)
+            ax.plot(fpr, tpr, label='Default (area = %0.3f)' % roc_auc)
+            ax.plot([0, 1], [0, 1], 'r--')
+
+            model = load_model(MODEL_SAVE + SAVE_POSTFIX + '_high_drop' + '.h5',
+                               custom_objects={'weighted_binary_crossentropy': weighted_binary_crossentropy,
+                                               'dice_coef': dice_coef})
+            fpr, tpr, roc_auc = plot_roc(model, DATA_PATH, LABEL_PATH, ROC_PATH, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
+
+            ax.plot(fpr, tpr, label='High Dropout (area = %0.3f)' % roc_auc)
+            ax.plot([0, 1], [0, 1], 'g--')
+
+            model = load_model(MODEL_SAVE + '_slow_gen_10x_high_drop' + '.h5',
+                               custom_objects={'weighted_binary_crossentropy': weighted_binary_crossentropy,
+                                               'dice_coef': dice_coef})
+            fpr, tpr, roc_auc = plot_roc(model, DATA_PATH, LABEL_PATH, ROC_PATH, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
+
+            ax.plot(fpr, tpr, label='Low Learning Rate (area = %0.3f)' % roc_auc)
+            ax.plot([0, 1], [0, 1], 'b--')
+            ax.set_xlim([0.0, 1.0])
+            ax.set_ylim([0.0, 1.05])
+            ax.set_xlabel('False Positive Rate')
+            ax.set_ylabel('True Positive Rate')
+            ax.set_title('Receiver Operating Characteristic - Sperm-only')
+            ax.legend(loc="lower right")
+            plt.show()
+
 
         elif state == 'check':
             # Check input data to visualize as images and values

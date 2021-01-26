@@ -455,14 +455,4 @@ def plot_roc(model, data_path, label_path, roc_path, height, width, channels):
     fpr, tpr, _ = roc_curve(ground_truth_labels, score_value)
     roc_auc = auc(fpr, tpr)
 
-    # Plot ROC with ROC value in the legend
-    fig, ax = plt.subplots(1, 1)
-    ax.plot(fpr, tpr, label='ROC curve (area = %0.3f)' % roc_auc)
-    ax.plot([0, 1], [0, 1], 'k--')
-    ax.set_xlim([0.0, 1.0])
-    ax.set_ylim([0.0, 1.05])
-    ax.set_xlabel('False Positive Rate')
-    ax.set_ylabel('True Positive Rate')
-    ax.set_title('Receiver Operating Characteristic - Sperm-only - High Dropout')
-    ax.legend(loc="lower right")
-    plt.show()
+    return fpr, tpr, roc_auc

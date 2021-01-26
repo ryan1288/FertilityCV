@@ -56,8 +56,7 @@ def blank_filter(data_from, label_from, data_to, label_to, height, width):
 
         # Must include at least one sperm in the label, a sperm is ~12x12 (20x), ~6x6 (10x), ~3x3 (5x)
         # Also filter out white images where more than quarter of the label is white
-        if (25 < pos_count < (height * width) / 5) and \
-                (70 < avg_intensity < 230):
+        if (25 < pos_count < (height * width) / 5) and (70 < avg_intensity < 230):
             imsave(label_to + mask, mask_img, check_contrast=False)
             # If the passes through filter, save the BF image as well
             imsave(data_to + mask, image, check_contrast=False)
@@ -71,7 +70,7 @@ def blank_filter(data_from, label_from, data_to, label_to, height, width):
 #   dead_to: dead channel images
 #   height: image height
 #   width: image width
-def preprocess(data_from, data_to, alive_to, dead_to, height, width):
+def preprocess(data_from, data_to, alive_to, dead_to, height, width, channels):
     tiff_num = 0
     # Assign image ids through the directory
     imagelist = os.listdir(data_from)
@@ -106,9 +105,9 @@ def preprocess(data_from, data_to, alive_to, dead_to, height, width):
                     sliced_img = full_img[j * height:(j + 1) * height, k * width:(k + 1) * width]
 
                     # Convert data images to uint8 and save
-                    if i % 3 == 0:
+                    if i % channels == 0:
                         sliced_img = (sliced_img / sliced_img.max() * 255).astype(np.uint8)
-                        imsave(data_to + str(tiff_num) + '_' + str(int(i / 3)) + '_' +
+                        imsave(data_to + str(tiff_num) + '_' + str(int(i / channels)) + '_' +
                                str(j * height_ratio + k) + '.png', sliced_img, check_contrast=False)
                     else:
                         # Check for fully positive images as the Otsu threshold works with > 1 colours
@@ -117,14 +116,19 @@ def preprocess(data_from, data_to, alive_to, dead_to, height, width):
                         else:
                             # Use Otsu threshold to create binary label
                             sliced_img = (sliced_img > threshold_otsu(sliced_img)) * 255
+
                         sliced_img = sliced_img.astype(np.uint8)
 
-                        # Save as alive or dead depending based on the sequence of stacked images
-                        if i % 3 == 1:
-                            imsave(alive_to + str(tiff_num) + '_' + str(int(i / 3)) + '_' +
-                                   str(j * height_ratio + k) + '.png', sliced_img, check_contrast=False)
-                        else:
-                            imsave(dead_to + str(tiff_num) + '_' + str(int(i / 3)) + '_' +
+                        # Save as alive or dead depending based on the sequence of stacked images if three channels
+                        if channels == 3:
+                            if i % 3 == 1:
+                                imsave(alive_to + str(tiff_num) + '_' + str(int(i / channels)) + '_' +
+                                       str(j * height_ratio + k) + '.png', sliced_img, check_contrast=False)
+                            else:
+                                imsave(dead_to + str(tiff_num) + '_' + str(int(i / channels)) + '_' +
+                                       str(j * height_ratio + k) + '.png', sliced_img, check_contrast=False)
+                        elif channels == 2:
+                            imsave(alive_to + str(tiff_num) + '_' + str(int(i / channels)) + '_' +
                                    str(j * height_ratio + k) + '.png', sliced_img, check_contrast=False)
 
         tiff_num += 1
@@ -152,3 +156,47 @@ def combine_labels(alive_from, dead_from, label_to):
         # Combined and save, with overlaps truncated by np.uint8
         label_img = alive_img | dead_img
         imsave(label_to + image, label_img, check_contrast=False)
+
+
+# Purpose: Combined alive and dead labels into one set of labels
+# Parameters:
+#   alive_from: alive labels data path
+#   dead_from: dead labels data path
+#   label_to: combined labels data path
+def split_data(data_from, label_from, data_to, label_to):
+    # Create image lists from the directories
+    label_list = os.listdir(label_from)
+    print('There are ' + str(len(label_list)) + ' pairs of images.')
+
+    # Acquire the split sizes
+    valid_size = int(input('Validation set size: '))
+    test_size = int(input('Test set size: '))
+
+    # Initialize training counts
+    valid_count = 0
+    test_count = 0
+
+    for i in tqdm(range(len(label_list))):
+        # Obtain the image name (identical for alive and dead) to get the image path
+        image = label_list[i]
+        data_source = data_from + image
+        label_source = label_from + image
+
+        # Read the png image
+        data_img = imread(data_source)
+        label_img = imread(label_source)
+
+        # Randomly distribute the images based on
+        rand = random.randint(0, len(label_list))
+        if rand <= valid_size and valid_count < valid_size:
+            folder = 'valid/valid/'
+            valid_count += 1
+        elif rand <= valid_size + test_size and test_count < test_size:
+            folder = 'test/test/'
+            test_count += 1
+        else:
+            folder = 'train/train/'
+
+        # Save both to the respective folder
+        imsave(data_to + folder + image, data_img, check_contrast=False)
+        imsave(label_to + folder + image, label_img, check_contrast=False)
