@@ -18,7 +18,7 @@ from math import sqrt, pow  # Math functions to manually calculate the distances
 from datagen import create_train_arrays  # To create the arrays for the ROC curve calculation
 
 # Constant values for testing
-predict_threshold = 0.92  # Thresholding sperm counting
+predict_threshold = 0.999  # Thresholding sperm counting
 min_distance = 6  # Minimum distance between local maxima
 radius_threshold = 2  # Minimum radius of label to be considered a sperm
 
@@ -74,7 +74,7 @@ def pred_show(x_test, model):
 #   model: CNN model used
 def watershed_pred(x_test, y_test, model):
     # Have a random or chosen predicted image
-    index_type = input('Choose index type (random, chosen)')
+    index_type = input('Choose index type (random, chosen, test)')
     if index_type == 'random':
         idx = random.randint(0, len(x_test))
         print('Random index: ' + str(idx))
@@ -90,10 +90,10 @@ def watershed_pred(x_test, y_test, model):
     x_img_exp = np.expand_dims(x_img_cpy, axis=0)
 
     # Predict using the trained model
-    predict = model.predict(x_img_exp, verbose=1)
+    predicted = model.predict(x_img_exp, verbose=1)
 
     # Current prediction set to be above a set confidence
-    predict = (predict > predict_threshold).astype(np.uint8)
+    predict = (predicted > predict_threshold).astype(np.uint8)
 
     # Create numpy image to be used in watershed
     image = np.squeeze(predict[0])
@@ -140,12 +140,14 @@ def watershed_pred(x_test, y_test, model):
     plt.figure(1)  # Original Image
     imshow(x_img)
     plt.figure(2)  # Predicted Label
-    imshow((image*255/image.max()).astype(np.uint8))
-    plt.figure(3)  # With Euclidian Distance
-    imshow((dist*255/dist.max()).astype(np.uint8))
-    plt.figure(4)  # Drawn Circles
+    imshow((predicted[0] * 255 / predicted[0].max()).astype(np.uint8))
+    plt.figure(3)  # Predicted Label
+    imshow((image * 255 / image.max()).astype(np.uint8))
+    plt.figure(4)  # With Euclidian Distance
+    imshow((dist * 255 / dist.max()).astype(np.uint8))
+    plt.figure(5)  # Drawn Circles
     imshow(x_img_cpy)
-    plt.figure(5)  # Original Label
+    plt.figure(6)  # Original Label
     imshow(y_img)
     plt.show()
 
@@ -210,7 +212,7 @@ def metrics(data_path, label_path, predict_path, distance_threshold, scale, rad_
     if scale == 'single':
         # Get random index in training dataset
         predict_list = os.listdir(data_path + folder_list[0])
-        idx = random.randint(0, len(predict_list))
+        idx = random.randint(0, len(predict_list) - 1)
         print('Index: ' + str(idx))
 
         # Get a randomized idx if only a single image is selected
@@ -352,7 +354,7 @@ def predict_set(model, data_from, predict_to, threshold=predict_threshold, test_
     if test_only:
         folder_list = ['test/test/']
     else:
-        folder_list = ['train/train', 'valid/valid', 'test/test/']
+        folder_list = ['train/train/', 'valid/valid/', 'test/test/']
 
     # Loop through folder list
     for folder in folder_list:

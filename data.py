@@ -70,26 +70,24 @@ def blank_filter(data_from, label_from, data_to, label_to, height, width):
 #   dead_to: dead channel images
 #   height: image height
 #   width: image width
-def preprocess(data_from, data_to, alive_to, dead_to, height, width, channels):
+def preprocess(data_from, data_to, label_to, height, width):
     tiff_num = 0
     # Assign image ids through the directory
     imagelist = os.listdir(data_from)
-
-    # Read one sample image for the dimensions
-    image_path = data_from + imagelist[0]
-    img = imread(image_path, plugin="tifffile")
-    height_ratio = img[0].shape[0] // height
-    width_ratio = img[0].shape[1] // width
-
-    # Get the proper resized dimensions for proportional cuts
-    resize_h = height * height_ratio
-    resize_w = width * width_ratio
 
     # Loop through every image using given path and unique folder identifier
     for image in tqdm(imagelist):
         # Read image as stacked TIFF file
         image_path = data_from + image
-        img = imread(image_path, plugin="tifffile")
+        img = imread(image_path, as_gray=True, plugin="tifffile")
+
+        # Calculate height ratio for a rounded number
+        height_ratio = img[0].shape[0] // height
+        width_ratio = img[0].shape[1] // width
+
+        # Get the proper resized dimensions for proportional cuts
+        resize_h = height * height_ratio
+        resize_w = width * width_ratio
 
         # Loop through each image within the TIFF stack
         for i in range(len(img)):
@@ -105,31 +103,24 @@ def preprocess(data_from, data_to, alive_to, dead_to, height, width, channels):
                     sliced_img = full_img[j * height:(j + 1) * height, k * width:(k + 1) * width]
 
                     # Convert data images to uint8 and save
-                    if i % channels == 0:
+                    if i % 2 == 0:
                         sliced_img = (sliced_img / sliced_img.max() * 255).astype(np.uint8)
-                        imsave(data_to + str(tiff_num) + '_' + str(int(i / channels)) + '_' +
+                        imsave(data_to + str(tiff_num) + '_' + str(int(i / 2)) + '_' +
                                str(j * height_ratio + k) + '.png', sliced_img, check_contrast=False)
                     else:
                         # Check for fully positive images as the Otsu threshold works with > 1 colours
                         if np.mean(sliced_img) > 65000:
                             sliced_img.fill(255)
-                        else:
+                        # Only use thresholding if there is more than one colour in the image and isn't only background
+                        elif np.mean(sliced_img) != 0:
                             # Use Otsu threshold to create binary label
                             sliced_img = (sliced_img > threshold_otsu(sliced_img)) * 255
 
                         sliced_img = sliced_img.astype(np.uint8)
 
-                        # Save as alive or dead depending based on the sequence of stacked images if three channels
-                        if channels == 3:
-                            if i % 3 == 1:
-                                imsave(alive_to + str(tiff_num) + '_' + str(int(i / channels)) + '_' +
-                                       str(j * height_ratio + k) + '.png', sliced_img, check_contrast=False)
-                            else:
-                                imsave(dead_to + str(tiff_num) + '_' + str(int(i / channels)) + '_' +
-                                       str(j * height_ratio + k) + '.png', sliced_img, check_contrast=False)
-                        elif channels == 2:
-                            imsave(alive_to + str(tiff_num) + '_' + str(int(i / channels)) + '_' +
-                                   str(j * height_ratio + k) + '.png', sliced_img, check_contrast=False)
+                        # Save as label based on image in the sequence
+                        imsave(label_to + str(tiff_num) + '_' + str(int(i / 2)) + '_' + str(j * height_ratio + k) +
+                               '.png', sliced_img, check_contrast=False)
 
         tiff_num += 1
 
@@ -175,10 +166,14 @@ def split_data(data_from, label_from, data_to, label_to):
     # Initialize training counts
     valid_count = 0
     test_count = 0
+    train_count = 0
+
+    to_randomize = list(range(len(label_list)))
+    np.random.shuffle(to_randomize)
 
     for i in tqdm(range(len(label_list))):
         # Obtain the image name (identical for alive and dead) to get the image path
-        image = label_list[i]
+        image = label_list[to_randomize[i]]
         data_source = data_from + image
         label_source = label_from + image
 
@@ -186,12 +181,11 @@ def split_data(data_from, label_from, data_to, label_to):
         data_img = imread(data_source)
         label_img = imread(label_source)
 
-        # Randomly distribute the images based on
-        rand = random.randint(0, len(label_list))
-        if rand <= valid_size and valid_count < valid_size:
+        # Randomly distribute the images based on pre-shuffled values
+        if valid_count < valid_size:
             folder = 'valid/valid/'
             valid_count += 1
-        elif rand <= valid_size + test_size and test_count < test_size:
+        elif test_count < test_size:
             folder = 'test/test/'
             test_count += 1
         else:

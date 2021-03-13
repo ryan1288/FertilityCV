@@ -5,10 +5,11 @@
 import tensorflow as tf  # Tensorflow including the Keras package within
 import os  # os to access and use directories
 import numpy as np  # numpy for array operations
+import scipy.io as s_io  # saving numpy arrays to matlab for graphing
 import matplotlib.pyplot as plt  # For plotting diagrams
 
 from tensorflow.keras.models import load_model  # Load saved model
-from tensorflow.keras.callbacks import EarlyStopping, TensorBoard, ModelCheckpoint  # Callbacks to save/evaluate
+from tensorflow.keras.callbacks import EarlyStopping, TensorBoard,  ModelCheckpoint  # Callbacks to save/evaluate
 
 # User-defined functions
 from datagen import create_train_arrays, create_generators  # Data importer functions
@@ -24,13 +25,13 @@ IMG_HEIGHT = 256
 IMG_WIDTH = 256
 IMG_CHANNELS = 3
 BATCH_SIZE = 2
-EPOCHS = 10
+EPOCHS = 50
 VALID_SPLIT = 0.1
 METRIC_DISTANCE = 4
 
 # Dataset paths
 IMAGE_PATH = 'D:/FertilityCV/'
-DATA_SOURCE = IMAGE_PATH + 'Testis_2/'
+DATA_SOURCE = IMAGE_PATH + 'Testis_2021_03_07/'
 TIFF_PATH = DATA_SOURCE + 'Export/'
 SIZED_PATH = DATA_SOURCE + 'Original/'
 FILTER_PATH = DATA_SOURCE + 'AutoFilter/'
@@ -41,8 +42,8 @@ ROC_PATH = DATA_SOURCE + 'ROC/'
 
 DATA_SAVE = 'numpy_data/'
 MODEL_SAVE = 'saved_models/model'
-SAVE_POSTFIX = '_new_' + str(MAGNIFICATION) + 'x'
-MODEL_POSTFIX = SAVE_POSTFIX + '_high_drop'
+SAVE_POSTFIX = '_testis'
+MODEL_POSTFIX = SAVE_POSTFIX + '_RHo'
 # Best is _high_drop
 
 # Checkpoints to keep the best weights
@@ -51,7 +52,7 @@ checkpoint_dir = os.path.dirname(checkpoint_path)
 
 # Create checkpoints/callbacks to stop and save before overfitting
 callbacks = [
-    EarlyStopping(patience=1, monitor='val_loss'),
+    # EarlyStopping(patience=5, monitor='val_loss'),
     TensorBoard(log_dir='./logs/' + MODEL_POSTFIX),
     ModelCheckpoint(checkpoint_path, monitor='val_loss', save_best_only=True, verbose=1)
 ]
@@ -77,9 +78,7 @@ if __name__ == '__main__':
                       'checkpoint, evaluate, predict, metrics, metrics_optimize, test, roc, check, exit)')
 
         if state == 'tiff':
-            channels = int(input('# Channels: (2, 3)'))
-            preprocess(TIFF_PATH, SIZED_PATH + 'Data/', SIZED_PATH + 'Alive/', SIZED_PATH + 'Dead/', IMG_HEIGHT,
-                       IMG_WIDTH, channels)
+            preprocess(TIFF_PATH, SIZED_PATH + 'Data/', SIZED_PATH + 'Label/', IMG_HEIGHT, IMG_WIDTH)
             print('Preprocessing complete')
 
         elif state == 'combine':
@@ -117,14 +116,26 @@ if __name__ == '__main__':
             calculate_weight(y_train)
 
         elif state == 'train':
+            train_type = input('Training type: (new, continue)')
+
             # Use create_generators to make the generators for the model training
             if not train_generator:
                 train_generator, val_generator, test_generator = create_generators(DATA_PATH, LABEL_PATH, BATCH_SIZE)
                 print('Generators created')
 
             # Create the UNet Architecture model
-            model = create_unet(IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
-            print('CNN Model created')
+            if train_type == 'new':
+                model = create_unet(IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
+                print('CNN Model created')
+            elif train_type == 'continue':
+                old_name = input('Model to continue training: ')
+                post_name = input('Name post-script after retraining: ')
+                model = load_model('saved_models/' + old_name + '.h5',
+                                   custom_objects={'weighted_binary_crossentropy': weighted_binary_crossentropy,
+                                                   'dice_coef': dice_coef})
+                print('Model loaded')
+            else:
+                continue
 
             # Using Image Generators with a 10% validation split
             results = model.fit(train_generator, validation_data=val_generator,
@@ -134,12 +145,16 @@ if __name__ == '__main__':
             print('Model trained')
 
             # Save model
-            model.save(MODEL_SAVE + MODEL_POSTFIX + '.h5')
+            if train_type == 'new':
+                model.save(MODEL_SAVE + MODEL_POSTFIX + '.h5')
+            else:
+                model.save('saved_models/' + old_name + '_' + post_name + '.h5')
             print('Model saved')
 
         elif state == 'load_model':
+            name = input('Model name:')
             # Load model
-            model = load_model(MODEL_SAVE + MODEL_POSTFIX + '.h5',
+            model = load_model('saved_models/' + name + '.h5',
                                custom_objects={'weighted_binary_crossentropy': weighted_binary_crossentropy,
                                                'dice_coef': dice_coef})
             print('Model loaded')
@@ -170,7 +185,7 @@ if __name__ == '__main__':
 
         elif state == 'predict':
             # Predicts and outputs a set of labels into a directory
-            predict_set(model, DATA_PATH, PREDICT_PATH)
+            predict_set(model, DATA_PATH, PREDICT_PATH, test_only=True)
 
         elif state == 'metrics':
             # Determine scale of metric to calculate
@@ -227,31 +242,31 @@ if __name__ == '__main__':
                 model = load_model(MODEL_SAVE + MODEL_POSTFIX + '.h5',
                                    custom_objects={'weighted_binary_crossentropy': weighted_binary_crossentropy,
                                                    'dice_coef': dice_coef})
-            # Plot ROC Curve along with AUC (Area under curve)
-            model = load_model(MODEL_SAVE + '_10x' + '.h5',
+            model = load_model(MODEL_SAVE + '_new_10x_low_drop' + '.h5',
                                custom_objects={'weighted_binary_crossentropy': weighted_binary_crossentropy,
                                                'dice_coef': dice_coef})
-            fpr, tpr, roc_auc = plot_roc(model, DATA_PATH, LABEL_PATH, ROC_PATH, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
+            # Plot ROC Curve along with AUC (Area under curve)
+            fpr1, tpr1, roc_auc1 = plot_roc(model, DATA_PATH, LABEL_PATH, ROC_PATH, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
 
             # Plot ROC with ROC value in the legend
             fig, ax = plt.subplots(1, 1)
-            ax.plot(fpr, tpr, label='Default (area = %0.3f)' % roc_auc)
+            ax.plot(fpr1, tpr1, label='Default (area = %0.3f)' % roc_auc1)
             ax.plot([0, 1], [0, 1], 'r--')
 
-            model = load_model(MODEL_SAVE + SAVE_POSTFIX + '_high_drop' + '.h5',
+            model = load_model(MODEL_SAVE + '_slow_10x_high_drop' + '.h5',
                                custom_objects={'weighted_binary_crossentropy': weighted_binary_crossentropy,
                                                'dice_coef': dice_coef})
-            fpr, tpr, roc_auc = plot_roc(model, DATA_PATH, LABEL_PATH, ROC_PATH, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
+            fpr2, tpr2, roc_auc2 = plot_roc(model, DATA_PATH, LABEL_PATH, ROC_PATH, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
 
-            ax.plot(fpr, tpr, label='High Dropout (area = %0.3f)' % roc_auc)
+            ax.plot(fpr2, tpr2, label='High Dropout (area = %0.3f)' % roc_auc2)
             ax.plot([0, 1], [0, 1], 'g--')
 
             model = load_model(MODEL_SAVE + '_slow_gen_10x_high_drop' + '.h5',
                                custom_objects={'weighted_binary_crossentropy': weighted_binary_crossentropy,
                                                'dice_coef': dice_coef})
-            fpr, tpr, roc_auc = plot_roc(model, DATA_PATH, LABEL_PATH, ROC_PATH, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
+            fpr3, tpr3, roc_auc3 = plot_roc(model, DATA_PATH, LABEL_PATH, ROC_PATH, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
 
-            ax.plot(fpr, tpr, label='Low Learning Rate (area = %0.3f)' % roc_auc)
+            ax.plot(fpr3, tpr3, label='Low Learning Rate (area = %0.3f)' % roc_auc3)
             ax.plot([0, 1], [0, 1], 'b--')
             ax.set_xlim([0.0, 1.0])
             ax.set_ylim([0.0, 1.05])
@@ -260,7 +275,9 @@ if __name__ == '__main__':
             ax.set_title('Receiver Operating Characteristic - Sperm-only')
             ax.legend(loc="lower right")
             plt.show()
-
+            mat_dic = {'fpr1': fpr1, 'tpr1': tpr1, 'roc_auc1': roc_auc1, 'fpr2': fpr2, 'tpr2': tpr2,
+                       'roc_auc2': roc_auc2, 'fpr3': fpr3, 'tpr3': tpr3, 'roc_auc3': roc_auc3}
+            s_io.savemat("to_graph.mat", mat_dic)
 
         elif state == 'check':
             # Check input data to visualize as images and values
