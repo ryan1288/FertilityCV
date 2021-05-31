@@ -45,7 +45,7 @@ def create_train_arrays(image_path, label_path, height, width, channels):
 #   batch_size: size of batch when training
 def create_generators(x_train, y_train, batch_size):
     # Seeds for consistent runs for debugging (optional)
-    seed = 47  # Arbitrary value
+    seed = 66  # Arbitrary value
 
     # Create generators that will augment the data for each epoch
 

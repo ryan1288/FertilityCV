@@ -16,14 +16,15 @@ from scipy import ndimage  # Part of watershed calculation to find markers
 from scipy import spatial  # KD Tree used to locate the nearest sperm in the label
 from math import sqrt, pow  # Math functions to manually calculate the distances if there is only one label
 from datagen import create_train_arrays  # To create the arrays for the ROC curve calculation
+from skimage.transform import resize  # resize images
 
 # Constant values for testing
-predict_threshold = 0.999  # Thresholding sperm counting
+predict_threshold = 0.94  # Thresholding sperm counting
 min_distance = 6  # Minimum distance between local maxima
-radius_threshold = 2  # Minimum radius of label to be considered a sperm
+radius_threshold = 3  # Minimum radius of label to be considered a sperm
 
 x10_min_dist = 6
-x10_min_rad = 3
+x10_min_rad = 2
 # 20x -
 # 10x - 0.94 / 6 / 3
 
@@ -105,8 +106,6 @@ def watershed_pred(x_test, y_test, model):
     # Connected component analysis before using watershed algorithm
     markers = ndimage.label(local_max, structure=np.ones((3, 3)))[0]
     labels = watershed(-dist, markers, mask=image)
-    # Old labels that included every blob
-    # print("[COUNT] {} unique instances found".format(len(np.unique(labels)) - 1))
 
     # Count of sperm
     sperm_count = 0
@@ -324,7 +323,7 @@ def count_metric(label, ground_truth, distance_threshold, scale, rad_threshold=r
             cv2.circle(pic, (int(false_n[0]), int(false_n[1])), distance_threshold - 1, (255, 0, 0), 1)
 
     # Calculate precision, recall, and F1 score
-    if tp + fp != 0:
+    if tp + fp > 0 and tp + fn > 0 and tp != 0:
         precision = tp / (tp + fp)
         recall = tp / (tp + fn)
         f1 = 2 * (precision * recall) / (precision + recall)
@@ -412,16 +411,18 @@ def metrics_optimize(model, data_path, label_path, predict_path, model_name, pre
     precisions = list()
     recalls = list()
     f1s = list()
+    csv_file = []
 
     # Use metrics function on each prediction threshold to calculate individual metrics
     for predict_thresh in predict_thresh_list:
-        predict_set(model, data_path, predict_path, float(predict_thresh))
+        predict_set(model, data_path, predict_path, float(predict_thresh), True)
         for min_rad in min_rad_list:
             print('Prediction threshold:' + str(predict_thresh) + ' / Minimum radius: ' + str(min_rad))
             precision, recall, f1 = metrics(data_path, label_path, predict_path, min_distance, 'full', int(min_rad))
             precisions.append(precision)
             recalls.append(recall)
             f1s.append(f1)
+            csv_file.append([precision, recall, f1])
             print('Precision: ' + str(precision) + ' / Recall: ' + str(recall) + ' / F1-score: ' + str(f1))
 
     # Display a summary of all prediction results
@@ -431,6 +432,7 @@ def metrics_optimize(model, data_path, label_path, predict_path, model_name, pre
             print('Prediction threshold:' + str(predict_thresh) + ' / Minimum radius: ' + str(min_rad))
             print('Precision: ' + str(precisions.pop(0)) + ' / Recall: ' + str(recalls.pop(0)) + ' / F1-score: '
                   + str(f1s.pop(0)))
+    np.savetxt("metrics.csv", csv_file, delimiter=",")
 
 
 # Purpose: Plot ROC curve for a model
@@ -458,3 +460,98 @@ def plot_roc(model, data_path, label_path, roc_path, height, width, channels):
     roc_auc = auc(fpr, tpr)
 
     return fpr, tpr, roc_auc
+
+
+# Purpose: Create a new video file based on original after overlaying predictions
+# Parameters:
+#   model: trained model used to predict images
+#   path: folder path to videos
+#   name: video name to process
+#   full: (39, 97) - (1839, 1330)
+#   half: (328, 97) - (1566, 1349)
+def predict_video(path, model, name, x1=94, y1=328, x2=1334, y2=1566, dim=256):
+    # Extract individual frames from the video file
+    capture = cv2.VideoCapture(path + name + '.mp4')
+    size = (x2 - x1, y2 - y1)
+    # Calculate height ratio for a rounded number
+    height_ratio = size[0] // dim
+    width_ratio = size[1] // dim
+    fourcc = cv2.VideoWriter_fourcc(*'DIVX')
+    out = cv2.VideoWriter(name + '_predict' + '.avi', fourcc, 30.0, (size[1], size[0]))
+    frame_count = 0
+    success = 1
+    while success:
+        success, image = capture.read()
+        if success:
+            img = image[x1:max(x2, x1+dim*(height_ratio + 1)), y1:max(y2, y1+dim*(width_ratio + 1))]
+        else:
+            out.release()
+            break
+        predicted = np.zeros(size)
+        # resized_img = resize(img, (resize_h, resize_w), mode='constant', preserve_range=True)
+        # Traversal by row left to right
+        for j in range(height_ratio + 1):
+            for k in range(width_ratio + 1):
+                # Cut out a sliced portion
+                sliced_img = img[j * dim:(j + 1) * dim, k * dim:(k + 1) * dim]
+                sliced_img = np.expand_dims(sliced_img, axis=0)
+
+                # Predict using the trained model
+                sliced_predicted = model.predict(sliced_img, verbose=0)
+
+                # Create numpy image to be used in watershed
+                sliced_predicted = np.squeeze(sliced_predicted[0])
+
+                if j == height_ratio:
+                    sliced_predicted = sliced_predicted[:size[0] - j * dim, :]
+                if k == width_ratio:
+                    sliced_predicted = sliced_predicted[:, :size[1] - k * dim]
+
+                predicted[j * dim:min((j + 1) * dim, size[0]), k * dim:min((k + 1) * dim, size[1])] = sliced_predicted
+
+        # Current prediction set to be above a set confidence
+        predict = (predicted > predict_threshold).astype(np.uint8)
+
+        # Euclidian distance from background using distance_transform
+        dist = ndimage.distance_transform_edt(predict)
+        local_max = peak_local_max(dist, indices=False, min_distance=min_distance, labels=predict)
+
+        # Connected component analysis before using watershed algorithm
+        markers = ndimage.label(local_max, structure=np.ones((3, 3)))[0]
+        labels = watershed(-dist, markers, mask=predict)
+
+        # Count of sperm
+        sperm_count = 0
+
+        # Loop through unique labels
+        for label in np.unique(labels):
+            # Ignore background regions
+            if label == 0:
+                continue
+
+            # Label unique detected regions
+            mask = np.zeros(predict.shape, dtype="uint8")
+            mask[labels == label] = 255
+
+            # Grab largest contour in the mask
+            contours = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            contours = imutils.grab_contours(contours)
+            c = max(contours, key=cv2.contourArea)
+
+            # Draw a circle and text enclosing the detected region
+            ((x, y), r) = cv2.minEnclosingCircle(c)
+            if r > radius_threshold:
+                cv2.circle(img, (int(x), int(y)), int(r), (0, 255, 0), 1)
+
+                sperm_count += 1
+
+        cv2.putText(img, "{}".format(sperm_count), (500, 600), cv2.FONT_HERSHEY_SIMPLEX,
+                    2, (0, 0, 255), 3)
+        img = img[:x2-x1, :y2-y1]
+        out.write(img)
+
+        frame_count += 1
+        print(frame_count)
+
+    out.release()
+    cv2.destroyAllWindows()

@@ -2,6 +2,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import random
+import cv2
 
 from skimage.transform import resize  # resize images
 from tqdm import tqdm  # progress bars on database extraction
@@ -79,7 +80,7 @@ def preprocess(data_from, data_to, label_to, height, width):
     for image in tqdm(imagelist):
         # Read image as stacked TIFF file
         image_path = data_from + image
-        img = imread(image_path, as_gray=True, plugin="tifffile")
+        img = imread(image_path, plugin="pil")  # as_gray=True)
 
         # Calculate height ratio for a rounded number
         height_ratio = img[0].shape[0] // height
@@ -96,6 +97,9 @@ def preprocess(data_from, data_to, label_to, height, width):
             # Resize to a multiple of the height ratio and model input dimensions
             full_img = resize(full_img, (resize_h, resize_w), mode='constant', preserve_range=True)
 
+            if i % 2 != 0:
+                _, full_img = cv2.threshold(full_img, 240, 255, cv2.THRESH_TOZERO)
+
             # Traversal by row left to right
             for j in range(height_ratio):
                 for k in range(width_ratio):
@@ -109,7 +113,7 @@ def preprocess(data_from, data_to, label_to, height, width):
                                str(j * height_ratio + k) + '.png', sliced_img, check_contrast=False)
                     else:
                         # Check for fully positive images as the Otsu threshold works with > 1 colours
-                        if np.mean(sliced_img) > 65000:
+                        if np.mean(sliced_img) == 255:
                             sliced_img.fill(255)
                         # Only use thresholding if there is more than one colour in the image and isn't only background
                         elif np.mean(sliced_img) != 0:
@@ -166,7 +170,6 @@ def split_data(data_from, label_from, data_to, label_to):
     # Initialize training counts
     valid_count = 0
     test_count = 0
-    train_count = 0
 
     to_randomize = list(range(len(label_list)))
     np.random.shuffle(to_randomize)
@@ -194,3 +197,20 @@ def split_data(data_from, label_from, data_to, label_to):
         # Save both to the respective folder
         imsave(data_to + folder + image, data_img, check_contrast=False)
         imsave(label_to + folder + image, label_img, check_contrast=False)
+
+
+# Purpose: Combined alive and dead labels into one set of labels
+# Parameters:
+#   data: auto-filtered data path
+#   label: auto-filtered label path
+def clean_data(data, label):
+    # Create image lists from the directories
+    data_list = os.listdir(data)
+    label_list = os.listdir(label)
+
+    for data_id in tqdm(data_list):
+        if data_id not in label_list:
+            os.remove(data + data_id)
+    for label_id in tqdm(label_list):
+        if label_id not in data_list:
+            os.remove(label + label_id)

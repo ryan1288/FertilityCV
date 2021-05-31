@@ -12,7 +12,8 @@ from tensorflow.keras import Model  # Compile and show summary of model
 #   y_true: ground truth label
 #   y_pred: predicted label
 #   weight: pre-calculated ratio of background to sperm labelled pixels
-def weighted_binary_crossentropy(y_true, y_pred, weight=861.4181519103258):
+#   Weight with tail: 49.997120091897564
+def weighted_binary_crossentropy(y_true, y_pred, weight=149.77968494303303):
     y_true = k.clip(y_true, k.epsilon(), 1-k.epsilon())
     y_pred = k.clip(y_pred, k.epsilon(), 1-k.epsilon())
     logloss = -(y_true * k.log(y_pred) + (1 - y_true) * k.log(1 - y_pred) / weight)
