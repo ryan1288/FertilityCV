@@ -1,10 +1,9 @@
 # Author: Ryan Lee
-# Create Date: Aug. 8th, 2020
+# Creation Date: Aug. 8th, 2020
 # Purpose: Test the UNet Architecture for semantic segmentation and counting
 
 import tensorflow as tf  # Tensorflow including the Keras package within
 import os  # os to access and use directories
-import numpy as np  # numpy for array operations
 import scipy.io as s_io  # saving numpy arrays to matlab for graphing
 import matplotlib.pyplot as plt  # For plotting diagrams
 
@@ -12,10 +11,14 @@ from tensorflow.keras.models import load_model  # Load saved model
 from tensorflow.keras.callbacks import EarlyStopping, TensorBoard,  ModelCheckpoint  # Callbacks to save/evaluate
 
 # User-defined functions
-from datagen import create_train_arrays, create_generators  # Data importer functions
-from model import create_unet, calculate_weight, weighted_binary_crossentropy, dice_coef, evaluate_model  # U-Net Model
-from tools import pred_show, watershed_pred, metrics, metrics_optimize, predict_set, plot_roc, predict_video  # Test model prediction
-from data import check_data, blank_filter, preprocess, combine_labels, split_data, clean_data  # Data manipulation tools
+# Data importer functions
+from datagen import create_generators
+# U-Net Model
+from model import create_unet, calculate_weight, weighted_binary_crossentropy, dice_coef, evaluate_model
+# Test model prediction
+from tools import watershed_pred, metrics, metrics_optimize, predict_set, plot_roc, predict_video, video_transitory
+# Data manipulation tools
+from data import check_data, blank_filter, preprocess, split_data, clean_data
 
 # Constants
 MAGNIFICATION = 10
@@ -26,12 +29,10 @@ IMG_WIDTH = 256
 IMG_CHANNELS = 3
 BATCH_SIZE = 8
 EPOCHS = 10
-VALID_SPLIT = 0.1
-METRIC_DISTANCE = 4
 
 # Dataset paths
 IMAGE_PATH = 'E:/FertilityCV/'
-FOLDER_NAME = 'Final_High/'
+FOLDER_NAME = '20x/'
 DATA_SOURCE = IMAGE_PATH + FOLDER_NAME
 TIFF_PATH = DATA_SOURCE + 'Export/'
 SIZED_PATH = DATA_SOURCE + 'Original/'
@@ -39,6 +40,7 @@ FILTER_PATH = DATA_SOURCE + 'AutoFilter/'
 DATA_PATH = DATA_SOURCE + 'Filtered/Data/'
 LABEL_PATH = DATA_SOURCE + 'Filtered/Label/'
 PREDICT_PATH = DATA_SOURCE + 'Predict/'
+SEARCH_PATH = DATA_SOURCE + 'Search/'
 ROC_PATH = DATA_SOURCE + 'ROC/'
 
 VIDEO_PATH = 'videos/'
@@ -54,7 +56,7 @@ checkpoint_dir = os.path.dirname(checkpoint_path)
 # Create checkpoints/callbacks to stop and save before overfitting
 callbacks = [
     EarlyStopping(patience=2, monitor='val_loss'),
-    TensorBoard(log_dir='./logs/' + MODEL_POSTFIX + '_3', update_freq=1),
+    TensorBoard(log_dir='./logs/' + MODEL_POSTFIX + '_cross', update_freq=1),
     ModelCheckpoint(checkpoint_path, monitor='val_loss', save_best_only=True, verbose=1)
 ]
 
@@ -74,50 +76,35 @@ if __name__ == '__main__':
     # Prompt until program is terminated
     while state != 'exit':
         # Select starting state
-        state = input('Select mode: (tiff, slice, filter, clean, split, data, load_data, weight, train, load_model, '
-                      'checkpoint, evaluate, predict, metrics, metrics_optimize, test, roc, check, video exit)')
+        state = input('Select mode: (tiff, slice, filter, clean, split, weight, train, load_model, checkpoint, '
+                      'evaluate, predict, metrics, metrics_optimize, test, roc, check, video exit)')
 
         if state == 'tiff':
             preprocess(TIFF_PATH, SIZED_PATH + 'Data/', SIZED_PATH + 'Label/', IMG_HEIGHT, IMG_WIDTH)
             print('Preprocessing complete')
 
-        elif state == 'combine':
-            combine_labels(SIZED_PATH + 'Alive/', SIZED_PATH + 'Dead/', SIZED_PATH + 'Label/')
-            print('Labels combined')
-
         elif state == 'filter':
             # Filters out empty labels and evident outliers (large white blobs covering > 25% of the label)
             blank_filter(SIZED_PATH + 'Data/', SIZED_PATH + 'Label/', FILTER_PATH + 'Data/', FILTER_PATH + 'Label/',
-                         IMG_HEIGHT, IMG_WIDTH)
+                         IMG_HEIGHT, IMG_WIDTH, DATA_SOURCE)
             print('Filtered blank images')
 
         elif state == 'clean':
             # Clean out labels without matching data images and vice versa
-            clean_data(FILTER_PATH + 'Data/', FILTER_PATH + 'Label/')
+            clean_data(FILTER_PATH + 'Data/', FILTER_PATH + 'Label/', SIZED_PATH + 'Data/', SIZED_PATH + 'Label/')
 
         elif state == 'split':
-            # Splits filtered dataset into training, validation, and test sets
-            split_data(FILTER_PATH + 'Data/', FILTER_PATH + 'Label/', DATA_PATH, LABEL_PATH)
-
-        elif state == 'data':
-            # Use create_image_arrays() to turn the dataset into arrays
-            x_train, y_train = create_train_arrays(DATA_PATH + 'train/train/', LABEL_PATH + 'train/train/',
-                                                   IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
-            np.save(DATA_SAVE + 'x_train' + SAVE_POSTFIX, x_train)
-            np.save(DATA_SAVE + 'y_train' + SAVE_POSTFIX, y_train)
-            print('Numpy arrays saved')
-
-        elif state == 'load_data':
-            # Load numpy arrays
-            x_train = np.load(DATA_SAVE + 'x_train' + SAVE_POSTFIX + '.npy')
-            y_train = np.load(DATA_SAVE + 'y_train' + SAVE_POSTFIX + '.npy')
-            print(np.shape(x_train))
-            print(np.shape(y_train))
-            print('Data loaded')
+            split_type = input('Training type: (normal, cross)')
+            if split_type == 'normal':
+                # Splits filtered dataset into training, validation, and test sets
+                split_data(FILTER_PATH + 'Data/', FILTER_PATH + 'Label/', DATA_PATH, LABEL_PATH)
+            elif split_type == 'cross':
+                # Split into five folders for five-fold cross validation
+                split_data(FILTER_PATH + 'Data/', FILTER_PATH + 'Label/', DATA_PATH, LABEL_PATH, True)
 
         elif state == 'weight':
             # Calculate the weight ratio of background/sperm for training
-            calculate_weight(y_train)
+            calculate_weight(DATA_SOURCE + 'Filtered/Label/train/train/')
 
         elif state == 'train':
             train_type = input('Training type: (new, continue)')
@@ -200,7 +187,7 @@ if __name__ == '__main__':
             # Determine scale of metric to calculate
             scale = input('Metric scale: (single, full)')
             # Calculates precision/recall based on a single image or the full dataset
-            precision, recall, f1 = metrics(DATA_PATH, LABEL_PATH, PREDICT_PATH, METRIC_DISTANCE, scale)
+            precision, recall, f1 = metrics(DATA_PATH, LABEL_PATH, PREDICT_PATH, scale)
             print('Precision: ' + str(precision))
             print('Recall: ' + str(recall))
             print('F1-score: ' + str(f1))
@@ -234,16 +221,8 @@ if __name__ == '__main__':
                 model = load_model(MODEL_SAVE + MODEL_POSTFIX + '.h5',
                                    custom_objects={'weighted_binary_crossentropy': weighted_binary_crossentropy,
                                                    'dice_coef': dice_coef})
-            # Select test and data type
-            test_type = input('Select test type: (basic, watershed)')
-
-            # Check if data is loaded, if so, use chosen test
-            if x_train is None:
-                print('Data not yet loaded')
-            elif test_type == 'basic':
-                pred_show(x_train, model)
-            elif test_type == 'watershed':
-                watershed_pred(x_train, y_train, model)
+                # Apply watershed algorithm and label predictions showing each step
+                watershed_pred(DATA_PATH + 'train/train/', LABEL_PATH + 'train/train/', model, SEARCH_PATH)
 
         elif state == 'roc':
             if model is None:
@@ -251,7 +230,8 @@ if __name__ == '__main__':
                 model = load_model(MODEL_SAVE + MODEL_POSTFIX + '.h5',
                                    custom_objects={'weighted_binary_crossentropy': weighted_binary_crossentropy,
                                                    'dice_coef': dice_coef})
-            model = load_model(MODEL_SAVE + '_normal_notail' + '.h5',
+            # Set model name here
+            model = load_model('saved_models/model_noedge_notail' + '.h5',
                                custom_objects={'weighted_binary_crossentropy': weighted_binary_crossentropy,
                                                'dice_coef': dice_coef})
             # Plot ROC Curve along with AUC (Area under curve)
@@ -259,15 +239,18 @@ if __name__ == '__main__':
 
             # Plot ROC with ROC value in the legend
             fig, ax = plt.subplots(1, 1)
-            ax.plot(fpr1, tpr1, label='Checkpoint (area = %0.3f)' % roc_auc1)
+            ax.plot(fpr1, tpr1, label='No Edge (area = %0.3f)' % roc_auc1)
             ax.plot([0, 1], [0, 1], 'r--')
 
-            model = load_model(MODEL_SAVE + '_overfitted_notail' + '.h5',
+            # Set second model (if necessary here)
+            model = load_model('saved_models/model_normal_notail' + '.h5',
                                custom_objects={'weighted_binary_crossentropy': weighted_binary_crossentropy,
                                                'dice_coef': dice_coef})
             fpr2, tpr2, roc_auc2 = plot_roc(model, DATA_PATH, LABEL_PATH, ROC_PATH, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
-            ax.plot(fpr2, tpr2, label='Overfitted (area = %0.3f)' % roc_auc2)
+            ax.plot(fpr2, tpr2, label='With Edges (area = %0.3f)' % roc_auc2)
             ax.plot([0, 1], [0, 1], 'b--')
+
+            # Set ROC plot limit before plotting
             ax.set_xlim([0.0, 1.0])
             ax.set_ylim([0.0, 1.05])
             ax.set_xlabel('False Positive Rate')
@@ -275,6 +258,8 @@ if __name__ == '__main__':
             ax.set_title('Receiver Operating Characteristic - Testis Cells')
             ax.legend(loc="lower right")
             plt.show()
+
+            # Values are saved to be plotted in matlab if needed
             mat_dic = {'fpr1': fpr1, 'tpr1': tpr1, 'roc_auc1': roc_auc1, 'fpr2': fpr2, 'tpr2': tpr2,
                        'roc_auc2': roc_auc2}
             s_io.savemat("to_graph.mat", mat_dic)
@@ -291,5 +276,9 @@ if __name__ == '__main__':
                                                    'dice_coef': dice_coef})
             # Select test and data type
             video_name = input('Enter video file name:')
-            # Turn a video into frames and process each individual frame
-            predict_video(VIDEO_PATH, model, video_name)
+            edit_type = input('Edit type: (instant, slow)')
+            if edit_type == 'instant':
+                # Turn a video into frames and process each individual frame
+                predict_video(VIDEO_PATH, model, video_name)
+            else:
+                video_transitory(VIDEO_PATH, model, video_name)

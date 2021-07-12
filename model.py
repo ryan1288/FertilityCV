@@ -1,8 +1,10 @@
 import tensorflow as tf
 import numpy as np
 import tensorflow.python.keras.backend as k
+import os
 
-
+from skimage.io import imread  # read images
+from tqdm import tqdm  # progress bars on database extraction
 from tensorflow.keras.layers import Input, Lambda, Conv2D, Dropout, MaxPooling2D, Conv2DTranspose, concatenate  # Model
 from tensorflow.keras import Model  # Compile and show summary of model
 
@@ -12,11 +14,10 @@ from tensorflow.keras import Model  # Compile and show summary of model
 #   y_true: ground truth label
 #   y_pred: predicted label
 #   weight: pre-calculated ratio of background to sperm labelled pixels
-#   Weight with tail: 49.997120091897564
-def weighted_binary_crossentropy(y_true, y_pred, weight=149.77968494303303):
+def weighted_binary_crossentropy(y_true, y_pred, weight=46147.1886646615):
     y_true = k.clip(y_true, k.epsilon(), 1-k.epsilon())
     y_pred = k.clip(y_pred, k.epsilon(), 1-k.epsilon())
-    logloss = -(y_true * k.log(y_pred) + (1 - y_true) * k.log(1 - y_pred) / weight)
+    logloss = -(y_true * k.log(y_pred) * weight + (1 - y_true) * k.log(1 - y_pred))
     return k.mean(logloss, axis=-1)
 
 
@@ -33,9 +34,17 @@ def dice_coef(y_true, y_pred, smooth=1):
 # Purpose: Calculate and output ratios of class types in all labels of a dataset
 # Parameters:
 #   y_train: training label dataset
-def calculate_weight(y_train):
+def calculate_weight(label_path):
+    labels = os.listdir(label_path)
+    pixel_sum = 0
+
+    # Sum up all positive pixels (divided by 255 to count all positive pixels as one
+    for label in tqdm(labels):
+        img = imread(label_path + label)
+        pixel_sum += np.sum(img)/255
+
     # Preliminary step to calculating ratio of - to + labels
-    positive_label_ratio = np.sum(y_train)/np.size(y_train)
+    positive_label_ratio = pixel_sum/(len(labels)*np.size(img))
     print('Ratio of + labels to full dataset: ' + str(positive_label_ratio))
 
     # Used to train the model

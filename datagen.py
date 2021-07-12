@@ -3,7 +3,7 @@ import numpy as np
 import tensorflow as tf
 
 from tqdm import tqdm  # progress bars on database extraction
-from skimage.io import imread  # show images as windows
+from skimage.io import imread  # read images
 from skimage.transform import resize  # resize images
 
 
@@ -57,16 +57,7 @@ def create_generators(x_train, y_train, batch_size):
                                                                width_shift_range=0.4, height_shift_range=0.4,
                                                                brightness_range=(0.8, 1.2), fill_mode='reflect',
                                                                horizontal_flip=True, vertical_flip=True)
-    """
-    # Previous settings
 
-    image_gen = tf.keras.preprocessing.image.ImageDataGenerator(rotation_range=80, zoom_range=0.4,
-                                                                width_shift_range=0.4, height_shift_range=0.4,
-                                                                fill_mode='reflect')
-    mask_gen = tf.keras.preprocessing.image.ImageDataGenerator(rotation_range=80, zoom_range=0.4,
-                                                               width_shift_range=0.4, height_shift_range=0.4,
-                                                               fill_mode='reflect')
-    """
     # Creating the validation Image and Mask generator (no augmentation)
     image_gen_val = tf.keras.preprocessing.image.ImageDataGenerator()
     mask_gen_val = tf.keras.preprocessing.image.ImageDataGenerator()
