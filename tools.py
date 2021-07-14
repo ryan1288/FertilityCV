@@ -21,7 +21,7 @@ from datagen import create_train_arrays  # To create the arrays for the ROC curv
 # Constant values for testing
 predict_threshold = 0.92  # Thresholding sperm counting
 default_min_distance = 6  # Default Minimum distance between local maxima
-min_distance = 6 # Minimum distance between local maxima for each sperm instance
+min_distance = 6  # Minimum distance between local maxima for each sperm instance
 radius_threshold = 4  # Minimum radius of label to be considered a sperm
 
 # Optimal minimum distance and radius for 20x magnification
@@ -417,7 +417,7 @@ def metrics_optimize(model, data_path, label_path, predict_path, model_name, pre
         for min_rad in min_rad_list:
             print('Prediction threshold:' + str(predict_thresh) + ' / Minimum radius: ' + str(min_rad))
             # Use the metrics function to calculate the metrics for each variable
-            precision, recall, f1 = metrics(data_path, label_path, predict_path, default_min_distance, 'full',
+            precision, recall, f1 = metrics(data_path, label_path, predict_path, 'full',
                                             int(min_rad))
             # Append the calculated precisions and recalls into a list
             precisions.append(precision)

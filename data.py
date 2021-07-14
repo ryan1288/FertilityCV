@@ -231,7 +231,7 @@ def clean_data(data, label):
     # Create image lists from the directories
     data_list = os.listdir(data)
     label_list = os.listdir(label)
-
+    """
     # One more check to clean up images that are in unwanted locations based on .csv file
     locations = list()
     with open('E:/FertilityCV/20x/locations.csv', encoding="utf-8-sig") as csv_file:
@@ -242,6 +242,7 @@ def clean_data(data, label):
         # Only save images that is not within the location to be deleted
         if (data_id.split('_')[1], data_id.split('_')[2][:-4]) in locations:
             os.remove(data + data_id)
+    """
 
     # Remove data images that are not in the label dataset
     for data_id in tqdm(data_list):

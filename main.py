@@ -4,7 +4,7 @@
 
 import tensorflow as tf  # Tensorflow including the Keras package within
 import os  # os to access and use directories
-import scipy.io as s_io  # saving numpy arrays to matlab for graphing
+import scipy.io as s_io  # Saving numpy arrays to matlab for graphing
 import matplotlib.pyplot as plt  # For plotting diagrams
 
 from tensorflow.keras.models import load_model  # Load saved model
@@ -21,7 +21,6 @@ from tools import watershed_pred, metrics, metrics_optimize, predict_set, plot_r
 from data import check_data, blank_filter, preprocess, split_data, clean_data
 
 # Constants
-MAGNIFICATION = 10
 RAW_IMG_HEIGHT = 2424
 RAW_IMG_WIDTH = 2424
 IMG_HEIGHT = 256
@@ -92,7 +91,7 @@ if __name__ == '__main__':
 
         elif state == 'clean':
             # Clean out labels without matching data images and vice versa
-            clean_data(FILTER_PATH + 'Data/', FILTER_PATH + 'Label/', SIZED_PATH + 'Data/', SIZED_PATH + 'Label/')
+            clean_data(FILTER_PATH + 'Data/', FILTER_PATH + 'Label/')
 
         elif state == 'split':
             split_type = input('Training type: (normal, cross)')
