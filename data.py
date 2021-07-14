@@ -15,22 +15,26 @@ from skimage.filters import threshold_otsu  # threshold labels from TIFF files
 # Parameters:
 #   x_train: numpy array of input data
 #   y_train: numpy array of input masks
-def check_data(x_train, y_train):
+def check_data(data_src, label_src):
+    # Get list of image names
+    img_names = os.listdir(data_src)
+
     # Generate a random index in the dataset
-    idx = random.randint(0, len(x_train))
+    idx = random.randint(0, len(img_names))
+
+    data_img = imread(data_src + img_names[idx])
+    label_img = imread(label_src + img_names[idx])
 
     # Show the random image pair of bright field and label
     plt.figure(1)
-    imshow(x_train[idx])
+    imshow(data_img)
     plt.figure(2)
-    imshow(y_train[idx])
+    imshow(label_img)
     plt.show()
 
     # Show sample data values from the sample image pair
-    print(x_train[idx, :, :, 0])
-    print(x_train[idx, :, :, 1])
-    print(x_train[idx, :, :, 2])
-    print(y_train[idx, :, :, 0])
+    print(data_img)
+    print(label_img)
 
 
 # Purpose: Quick filter of all labels that do not include a single sperm or more than quarter of the label is white or
@@ -129,7 +133,7 @@ def preprocess(data_from, data_to, label_to, height, width):
                     # Cut out a sliced portion
                     sliced_img = full_img[j * height:(j + 1) * height, k * width:(k + 1) * width]
 
-                    # Convert data images to uint8 and save
+                    # Convert data images to uint8 and save, if a BF-only TIFF, only divided but none put in labels
                     if i % 2 == 0 or tiff_type == 'BF':
                         sliced_img = (sliced_img / sliced_img.max() * 255).astype(np.uint8)
                         imsave(data_to + str(tiff_num) + '_' + str(int(i / 2)) + '_' +

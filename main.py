@@ -32,7 +32,7 @@ EPOCHS = 10
 
 # Dataset paths
 IMAGE_PATH = 'E:/FertilityCV/'
-FOLDER_NAME = '20x/'
+FOLDER_NAME = 'Sample/'
 DATA_SOURCE = IMAGE_PATH + FOLDER_NAME
 TIFF_PATH = DATA_SOURCE + 'Export/'
 SIZED_PATH = DATA_SOURCE + 'Original/'
@@ -76,10 +76,11 @@ if __name__ == '__main__':
     # Prompt until program is terminated
     while state != 'exit':
         # Select starting state
-        state = input('Select mode: (tiff, slice, filter, clean, split, weight, train, load_model, checkpoint, '
-                      'evaluate, predict, metrics, metrics_optimize, test, roc, check, video exit)')
+        state = input('Select mode: (tiff, filter, clean, split, weight, train, load_model, checkpoint, '
+                      'evaluate, predict, metrics, metrics_optimize, test, roc, check, video, exit)')
 
         if state == 'tiff':
+            # Splits up tiff files into data and label images
             preprocess(TIFF_PATH, SIZED_PATH + 'Data/', SIZED_PATH + 'Label/', IMG_HEIGHT, IMG_WIDTH)
             print('Preprocessing complete')
 
@@ -221,8 +222,8 @@ if __name__ == '__main__':
                 model = load_model(MODEL_SAVE + MODEL_POSTFIX + '.h5',
                                    custom_objects={'weighted_binary_crossentropy': weighted_binary_crossentropy,
                                                    'dice_coef': dice_coef})
-                # Apply watershed algorithm and label predictions showing each step
-                watershed_pred(DATA_PATH + 'train/train/', LABEL_PATH + 'train/train/', model, SEARCH_PATH)
+            # Apply watershed algorithm and label predictions showing each step
+            watershed_pred(DATA_PATH + 'train/train/', LABEL_PATH + 'train/train/', model, SEARCH_PATH)
 
         elif state == 'roc':
             if model is None:
@@ -231,7 +232,8 @@ if __name__ == '__main__':
                                    custom_objects={'weighted_binary_crossentropy': weighted_binary_crossentropy,
                                                    'dice_coef': dice_coef})
             # Set model name here
-            model = load_model('saved_models/model_noedge_notail' + '.h5',
+            model_name = input('Model name:')
+            model = load_model('saved_models/' + model_name + '.h5',
                                custom_objects={'weighted_binary_crossentropy': weighted_binary_crossentropy,
                                                'dice_coef': dice_coef})
             # Plot ROC Curve along with AUC (Area under curve)
@@ -239,9 +241,9 @@ if __name__ == '__main__':
 
             # Plot ROC with ROC value in the legend
             fig, ax = plt.subplots(1, 1)
-            ax.plot(fpr1, tpr1, label='No Edge (area = %0.3f)' % roc_auc1)
+            ax.plot(fpr1, tpr1, label='Normal (area = %0.3f)' % roc_auc1)
             ax.plot([0, 1], [0, 1], 'r--')
-
+            """
             # Set second model (if necessary here)
             model = load_model('saved_models/model_normal_notail' + '.h5',
                                custom_objects={'weighted_binary_crossentropy': weighted_binary_crossentropy,
@@ -249,7 +251,7 @@ if __name__ == '__main__':
             fpr2, tpr2, roc_auc2 = plot_roc(model, DATA_PATH, LABEL_PATH, ROC_PATH, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS)
             ax.plot(fpr2, tpr2, label='With Edges (area = %0.3f)' % roc_auc2)
             ax.plot([0, 1], [0, 1], 'b--')
-
+            """
             # Set ROC plot limit before plotting
             ax.set_xlim([0.0, 1.0])
             ax.set_ylim([0.0, 1.05])
@@ -260,13 +262,13 @@ if __name__ == '__main__':
             plt.show()
 
             # Values are saved to be plotted in matlab if needed
-            mat_dic = {'fpr1': fpr1, 'tpr1': tpr1, 'roc_auc1': roc_auc1, 'fpr2': fpr2, 'tpr2': tpr2,
-                       'roc_auc2': roc_auc2}
+            mat_dic = {'fpr1': fpr1, 'tpr1': tpr1, 'roc_auc1': roc_auc1}
+            # , 'fpr2': fpr2, 'tpr2': tpr2, 'roc_auc2': roc_auc2}
             s_io.savemat("to_graph.mat", mat_dic)
 
         elif state == 'check':
             # Check input data to visualize as images and values
-            check_data(x_train, y_train)
+            check_data(DATA_PATH + 'train/train/', LABEL_PATH + 'train/train/')
 
         elif state == 'video':
             if model is None:

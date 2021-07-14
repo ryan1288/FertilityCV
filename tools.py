@@ -19,7 +19,7 @@ from math import sqrt, pow  # Math functions to manually calculate the distances
 from datagen import create_train_arrays  # To create the arrays for the ROC curve calculation
 
 # Constant values for testing
-predict_threshold = 0.96  # Thresholding sperm counting
+predict_threshold = 0.92  # Thresholding sperm counting
 default_min_distance = 6  # Default Minimum distance between local maxima
 min_distance = 6 # Minimum distance between local maxima for each sperm instance
 radius_threshold = 4  # Minimum radius of label to be considered a sperm
